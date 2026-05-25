@@ -61,6 +61,12 @@ const SOUNDS = {
     [330, 277, 220, 165].forEach((f, i) => setTimeout(() => tone(f, 230, { type: "sawtooth", gain: 0.10 }), i * 110));
   },
   notify: () => chord([880, 1320], 160, { type: "sine", gain: 0.12 }),
+  card:  () => { tone(240, 70, { type: "triangle", gain: 0.11 }); setTimeout(() => tone(320, 60, { gain: 0.09 }), 40); },
+  bita:  () => {
+    [440, 554, 659, 880].forEach((f, i) => setTimeout(() => tone(f, 140, { type: "square", gain: 0.13 }), i * 55));
+  },
+  take:  () => { tone(140, 120, { type: "sawtooth", gain: 0.12 }); setTimeout(() => tone(100, 160, { gain: 0.10 }), 90); },
+  transfer: () => chord([392, 523, 659], 280, { type: "triangle", gain: 0.11 }),
 };
 
 export function play(name) {
