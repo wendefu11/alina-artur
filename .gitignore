@@ -1,0 +1,20 @@
+# Local server runtime
+server/data/stats.json
+server/__pycache__/
+*.pyc
+
+# Tools (too large for git)
+cloudflared.exe
+*.exe
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log

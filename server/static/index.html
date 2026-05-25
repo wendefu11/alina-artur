@@ -1,0 +1,143 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Алина и Артур</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div id="profileOverlay" class="overlay">
+    <div class="overlay-card">
+      <div class="eyebrow">Вход</div>
+      <h2>Выбери профиль</h2>
+      <p class="overlay-text">Сначала выбирается Алина или Артур. После входа этот экран исчезает и больше не мешает, пока вы сами не смените профиль в настройках.</p>
+      <div class="profile-grid">
+        <button id="overlayAlina" class="profile-card"><span class="avatar avatar-alina">А</span><strong>Алина</strong><small>Открыть кабинет Алины</small></button>
+        <button id="overlayArtur" class="profile-card"><span class="avatar avatar-artur">А</span><strong>Артур</strong><small>Открыть кабинет Артура</small></button>
+      </div>
+    </div>
+  </div>
+
+  <aside id="settingsDrawer" class="settings-drawer hidden">
+    <div id="drawerBackdrop" class="drawer-backdrop"></div>
+    <div class="drawer-panel">
+      <div class="section-head">
+        <div>
+          <h2>Настройки</h2>
+          <p>Профиль и оформление</p>
+        </div>
+        <button id="closeSettingsBtn" class="ghost-btn compact">Закрыть</button>
+      </div>
+
+      <div class="settings-block">
+        <h3>Сменить профиль</h3>
+        <div class="profile-grid">
+          <button id="drawerAlina" class="profile-card"><span class="avatar avatar-alina">А</span><strong>Алина</strong><small>Переключиться на профиль Алины</small></button>
+          <button id="drawerArtur" class="profile-card"><span class="avatar avatar-artur">А</span><strong>Артур</strong><small>Переключиться на профиль Артура</small></button>
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Тема сайта</h3>
+        <div class="theme-grid">
+          <button id="themeLightBtn" class="theme-card"><strong>Светлая</strong><span>Теплая и мягкая тема</span></button>
+          <button id="themeDarkBtn" class="theme-card"><strong>Темная</strong><span>Вечерняя контрастная тема</span></button>
+        </div>
+      </div>
+
+      <button id="clearProfileBtn" class="ghost-btn">Выйти из профиля</button>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+    <header class="hero card">
+      <div class="hero-glow hero-glow-left"></div>
+      <div class="hero-glow hero-glow-right"></div>
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">Private Match Club</div>
+          <h1>Алина и Артур</h1>
+          <p class="hero-text">Личный игровой сайт для вас двоих: вход по профилю, красивые карточки, история матчей, приглашения и быстрый запуск комнат.</p>
+          <div class="typewriter-wrap">
+            <span class="typewriter-label">Сообщение дня</span>
+            <div id="loveTypewriter" class="typewriter-text"></div>
+          </div>
+        </div>
+        <button id="openSettingsBtn" class="menu-btn" aria-label="Открыть настройки"><span></span><span></span><span></span></button>
+      </div>
+      <div class="hero-romance">
+        <div class="love-scene">
+          <div class="love-card love-card-alina">
+            <span class="love-badge">Алина</span>
+            <strong>Сияющая королева комнаты</strong>
+            <small>Побеждает красиво и нежно</small>
+          </div>
+          <div class="love-center">
+            <div class="heart heart-main"></div>
+            <div class="heart heart-small heart-one"></div>
+            <div class="heart heart-small heart-two"></div>
+          </div>
+          <div class="love-card love-card-artur">
+            <span class="love-badge">Артур</span>
+            <strong>Герой дуэлей и камбэков</strong>
+            <small>Всегда готов к новой игре</small>
+          </div>
+        </div>
+      </div>
+      <div id="profileHeader" class="profile-header"></div>
+      <div id="flash" class="flash"></div>
+    </header>
+
+    <section class="top-grid">
+      <div class="card">
+        <h2>Приглашение</h2>
+        <div id="inviteEmpty" class="invite-empty">Пока для выбранного профиля нет активных приглашений.</div>
+        <div id="inviteCard" class="invite-card hidden">
+          <div id="inviteTitle" class="invite-title"></div>
+          <div id="inviteSubtitle" class="invite-subtitle"></div>
+          <button id="joinInviteBtn" class="primary-btn">Подключиться к комнате</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Быстрое действие</h2>
+        <p class="hero-text">Комната создается сразу под выбранную игру, а второй человек увидит приглашение на стартовом экране.</p>
+        <div class="quick-note">Профиль закреплен за этим устройством, пока вы не поменяете его в настройках.</div>
+      </div>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="card"><h2>Статистика</h2><div id="statsCards" class="stats-grid"></div></div>
+      <div class="card"><h2>История матчей</h2><div id="historyBox" class="history-list"></div></div>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="card">
+        <h2>Создать игру</h2>
+        <div class="game-grid">
+          <button class="game-card" data-game="ticTacToe"><strong>Крестики-нолики</strong><span>Спокойная партия один на один</span></button>
+          <button class="game-card" data-game="rps"><strong>Камень ножницы бумага</strong><span>Быстрые раунды и серия побед</span></button>
+          <button class="game-card" data-game="pong"><strong>Pong</strong><span>Живая аркада с управлением ракетками</span></button>
+          <button class="game-card" data-game="durak"><strong>Дурак</strong><span>Колода 36 карт, козырь и отбивание</span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-head"><div><h2>Активная комната</h2><p id="roomText">Сейчас комнаты нет.</p></div><div id="roomBadge" class="room-badge">Нет комнаты</div></div>
+        <div id="playersBox" class="players-box">Сначала выбери профиль.</div>
+        <button id="leaveRoomBtn" class="ghost-btn room-leave hidden">Выйти из игры</button>
+      </div>
+    </section>
+
+    <section id="ticTacToeCard" class="card hidden"><div class="section-head"><div><h2>Крестики-нолики</h2><p id="tttStatus">Ждем комнату.</p></div><button id="restartTttBtn" class="ghost-btn compact">Новая партия</button></div><div id="tttBoard" class="ttt-board"></div></section>
+    <section id="rpsCard" class="card hidden"><div class="section-head"><div><h2>Камень ножницы бумага</h2><p id="rpsRound">Ждем комнату.</p></div><button id="restartRpsBtn" class="ghost-btn compact">Очистить</button></div><div class="rps-grid"><button class="rps-choice" data-choice="rock"><strong>Камень</strong><span>Ломает ножницы</span></button><button class="rps-choice" data-choice="scissors"><strong>Ножницы</strong><span>Режут бумагу</span></button><button class="rps-choice" data-choice="paper"><strong>Бумага</strong><span>Накрывает камень</span></button></div><div class="duo-score"><div><span>Игрок 1</span><strong id="score1">0</strong></div><div><span>Игрок 2</span><strong id="score2">0</strong></div></div><div id="rpsResult" class="result-box">Сделайте выбор.</div></section>
+    <section id="pongCard" class="card hidden"><div class="section-head"><div><h2>Pong</h2><p id="pongStatus">Ждем комнату.</p></div><button id="restartPongBtn" class="ghost-btn compact">Новый матч</button></div><div class="duo-score"><div><span>Левый игрок</span><strong id="pongScore1">0</strong></div><div><span>Правый игрок</span><strong id="pongScore2">0</strong></div></div><div id="pongStage" class="pong-stage"><div id="pongPaddle1" class="pong-paddle"></div><div id="pongPaddle2" class="pong-paddle"></div><div id="pongBall" class="pong-ball"></div></div><p class="pong-help">Игрок 1 двигается на W/S, игрок 2 на стрелках вверх/вниз. На телефоне можно нажимать кнопки ниже.</p><div class="pong-controls"><button id="pongUpBtn" class="ghost-btn">Вверх</button><button id="pongDownBtn" class="ghost-btn">Вниз</button></div></section>    <section id="durakCard" class="card hidden"><div class="section-head"><div><h2>Дурак</h2><p id="durakStatus">Ждем комнату.</p></div><button id="restartDurakBtn" class="ghost-btn compact">Новая раздача</button></div><div class="durak-topline"><div id="durakTrump" class="durak-trump"></div><div id="durakDeck" class="durak-deck"></div></div><div class="durak-lobby"><div class="durak-opponent-block"><div class="durak-label">Карты соперника</div><div id="durakOpponent" class="durak-opponent"></div></div><div class="durak-table-wrap"><div class="durak-label">Стол</div><div id="durakTable" class="durak-table"></div><div class="durak-actions"><button id="durakTakeBtn" class="ghost-btn">Взять</button><button id="durakFinishBtn" class="ghost-btn">Бита</button></div></div></div><div class="durak-hand-wrap"><div class="durak-label">Твои карты</div><div id="durakHand" class="durak-hand"></div></div></section>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
+
+
+
+
