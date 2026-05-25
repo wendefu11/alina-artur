@@ -975,6 +975,100 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
 .sw-dawn   { background: linear-gradient(135deg, #fff5ef 30%, #ffe0d3, #ffb1c8); }
 .sw-noir   { background: radial-gradient(circle at 20% 20%, #d4a373, transparent 50%), linear-gradient(135deg, #04060a, #0c0e18); }
 
+/* ── mode picker (hot-seat / AI / online) ──────────────── */
+.mode-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.mode-chip {
+  padding: 8px 16px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  font-weight: 700; font-size: 13px; color: var(--text-2);
+  transition: all .18s ease;
+}
+.mode-chip:hover { color: var(--text); border-color: var(--accent); }
+.mode-chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: 0 10px 24px -10px rgba(255,93,143,.5); }
+
+/* ── lobby modal ──────────────────────────────────────── */
+.lobby-card { max-width: 520px; }
+.lobby-host, .lobby-join { display: flex; gap: 10px; margin: 14px 0; }
+.lobby-host .cta-btn { flex: 1; }
+.lobby-join { align-items: stretch; }
+.lobby-input { flex: 1; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700; font-family: "Space Grotesk", sans-serif; }
+.lobby-or {
+  text-align: center; color: var(--text-2); font-size: 12px;
+  text-transform: uppercase; letter-spacing: .2em; margin: 8px 0;
+  position: relative;
+}
+.lobby-or::before, .lobby-or::after {
+  content: ""; position: absolute; top: 50%; width: 40%; height: 1px;
+  background: var(--line);
+}
+.lobby-or::before { left: 0; }
+.lobby-or::after  { right: 0; }
+.lobby-codebox {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,93,143,.08), rgba(167,139,250,.08));
+  border: 1px solid var(--line);
+}
+.lobby-code {
+  font-family: "Space Grotesk", "Courier New", monospace;
+  font-size: 38px; font-weight: 800; letter-spacing: 0.2em;
+  text-align: center;
+  background: var(--accent-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  margin-bottom: 10px;
+}
+.lobby-status { text-align: center; margin-top: 12px; font-size: 14px; }
+.row-center { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ── achievements grid ─────────────────────────────────── */
+.ach-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  margin-top: 18px;
+}
+.ach-card {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  transition: transform .2s ease, border-color .2s ease;
+}
+.ach-card.on { border-color: rgba(255,93,143,.4); box-shadow: 0 0 0 1px rgba(255,93,143,.18); }
+.ach-card.off { opacity: .55; }
+.ach-card:hover { transform: translateY(-2px); }
+.ach-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  display: grid; place-items: center; font-size: 26px;
+  background: var(--bg-2); border: 1px solid var(--line-2);
+}
+.ach-card.tier-bronze .ach-icon { background: linear-gradient(135deg, #cd7f32, #8b4513); color: #fff; }
+.ach-card.tier-silver .ach-icon { background: linear-gradient(135deg, #c0c0c0, #6b7280); color: #fff; }
+.ach-card.tier-gold   .ach-icon { background: linear-gradient(135deg, #fbbf24, #d97706); color: #fff; }
+.ach-card.tier-secret .ach-icon { background: linear-gradient(135deg, #a78bfa, #6d28d9); color: #fff; }
+.ach-card .ach-body strong { display: block; font-size: 15px; margin-bottom: 2px; }
+.ach-card .ach-body small  { color: var(--text-2); font-size: 12px; }
+.ach-card .ach-state {
+  font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--bg-2); color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .12em;
+}
+.ach-card.on .ach-state {
+  background: var(--accent-grad); color: #fff;
+}
+
+/* ── settings-row ──────────────────────────────────────── */
+.setting-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 12px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  margin-bottom: 8px; cursor: pointer;
+  font-weight: 600;
+}
+.setting-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+
 /* ── legacy-compat (vars + classes used by games.js inline styles) ─ */
 :root {
   --surface-0: var(--bg-2);

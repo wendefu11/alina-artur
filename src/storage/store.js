@@ -1,39 +1,32 @@
-// ─────────────────────────  STORAGE  ─────────────────────────
-// LocalStorage wrapper. Single key. Versioned schema.
-// Everything is per-profile where it makes sense (stats, diary, mood, wishes).
+// ─────────────────────────  STORAGE / STORE  ─────────────────────────
+// LocalStorage wrapper. Single key. Versioned schema with soft migration.
+// Per-profile: stats, highScores, quiz, diary, mood, achievements, counters.
+// Shared:      wishes, history, theme, profile, startDate.
 
-const KEY = "alina-artur-v3";
+const KEY = "alina-artur-v4";
+const LEGACY_KEYS = ["alina-artur-v3"]; // for soft migration of older data
 
 const DEFAULT_STATE = {
-  version: 3,
-  profile: "",          // "Алина" | "Артур" | ""
-  theme: "aurora",      // "aurora" | "dawn" | "noir"
-  startDate: "2024-02-14", // дата начала отношений; пользователь может поменять
-  hero: {
-    photo: "",          // dataURL опционально
-    songLink: "",
-  },
-  stats: {
-    "Алина": emptyStats(),
-    "Артур": emptyStats(),
-  },
-  history: [],          // [{ts, game, winner, loser, draw}]
-  highScores: {
-    "Алина": {},
-    "Артур": {},
-  },
-  quiz: {
-    "Алина": [],        // [{ts, score, total}]
-    "Артур": [],
-  },
-  diary: {
-    "Алина": [],        // [{ts, text, mood, emoji}]
-    "Артур": [],
-  },
-  wishes: [],           // shared. [{id, text, done, by}]
-  mood: {
-    "Алина": null,      // {id, ts}
-    "Артур": null,
+  version: 4,
+  profile: "",
+  theme: "aurora",
+  startDate: "2024-02-14",
+  hero: { photo: "", songLink: "" },
+  stats: { "Алина": emptyStats(), "Артур": emptyStats() },
+  history: [],
+  highScores: { "Алина": {}, "Артур": {} },
+  quiz: { "Алина": [], "Артур": [] },
+  diary: { "Алина": [], "Артур": [] },
+  wishes: [],
+  mood: { "Алина": null, "Артур": null },
+  // NEW in v4 ↓
+  achievements: { "Алина": {}, "Артур": {} }, // { [id]: {ts, gameId?} }
+  counters:     { "Алина": {}, "Артур": {} }, // arbitrary counters for tracker (compliment, dice, …)
+  prefs: {
+    sound: true,
+    vibration: true,
+    reducedMotion: false,
+    online: { lastPeerId: "" },
   },
 };
 
@@ -49,22 +42,35 @@ function safeParse(s) {
   try { return JSON.parse(s); } catch { return null; }
 }
 
+function readLegacy() {
+  for (const k of LEGACY_KEYS) {
+    const raw = localStorage.getItem(k);
+    const parsed = raw ? safeParse(raw) : null;
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
 export function load() {
-  const raw = localStorage.getItem(KEY);
-  const parsed = raw ? safeParse(raw) : null;
-  if (!parsed || parsed.version !== DEFAULT_STATE.version) {
+  let parsed = safeParse(localStorage.getItem(KEY));
+  if (!parsed) {
+    const legacy = readLegacy();
+    if (legacy) parsed = legacy;
+  }
+  if (!parsed) {
     save(DEFAULT_STATE);
     return structuredClone(DEFAULT_STATE);
   }
-  // Soft-merge: make sure newly added keys are present.
+  // Soft-merge: ensure newly added keys are present.
   const merged = { ...structuredClone(DEFAULT_STATE), ...parsed };
-  for (const k of ["stats", "highScores", "quiz", "diary", "mood"]) {
+  const PER_PROFILE = ["stats", "highScores", "quiz", "diary", "mood", "achievements", "counters"];
+  for (const k of PER_PROFILE) {
     merged[k] = { ...DEFAULT_STATE[k], ...(parsed[k] || {}) };
     for (const who of ["Алина", "Артур"]) {
       if (k === "stats") {
         merged[k][who] = { ...emptyStats(), ...(merged[k][who] || {}) };
         merged[k][who].byGame = { ...(merged[k][who].byGame || {}) };
-      } else if (k === "highScores") {
+      } else if (k === "highScores" || k === "achievements" || k === "counters") {
         merged[k][who] = merged[k][who] || {};
       } else if (k === "quiz" || k === "diary") {
         merged[k][who] = Array.isArray(merged[k][who]) ? merged[k][who] : [];
@@ -76,6 +82,9 @@ export function load() {
   merged.history = Array.isArray(merged.history) ? merged.history : [];
   merged.wishes  = Array.isArray(merged.wishes)  ? merged.wishes  : [];
   merged.hero    = { ...DEFAULT_STATE.hero, ...(merged.hero || {}) };
+  merged.prefs   = { ...DEFAULT_STATE.prefs, ...(parsed.prefs || {}) };
+  merged.version = DEFAULT_STATE.version;
+  save(merged);
   return merged;
 }
 
@@ -172,6 +181,37 @@ export function removeWish(state, id) {
 function cryptoId() {
   if (window.crypto?.randomUUID) return crypto.randomUUID();
   return "w_" + Math.random().toString(36).slice(2, 10);
+}
+
+// ── achievements / counters ────────────────────────────────
+
+export function unlockAchievement(state, profile, achId, meta = {}) {
+  if (!state.achievements[profile]) state.achievements[profile] = {};
+  if (state.achievements[profile][achId]) return false; // already unlocked
+  state.achievements[profile][achId] = { ts: Date.now(), ...meta };
+  save(state);
+  return true;
+}
+
+export function isUnlocked(state, profile, achId) {
+  return !!state.achievements?.[profile]?.[achId];
+}
+
+export function bumpCounter(state, profile, key, by = 1) {
+  if (!state.counters[profile]) state.counters[profile] = {};
+  state.counters[profile][key] = (state.counters[profile][key] || 0) + by;
+  save(state);
+  return state.counters[profile][key];
+}
+
+export function getCounters(state, profile) {
+  return state.counters?.[profile] || {};
+}
+
+export function setPref(state, key, value) {
+  state.prefs = state.prefs || {};
+  state.prefs[key] = value;
+  save(state);
 }
 
 export function exportJSON(state) {

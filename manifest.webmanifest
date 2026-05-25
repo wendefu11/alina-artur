@@ -1,0 +1,22 @@
+{
+  "name": "Алина & Артур · Private Lounge",
+  "short_name": "Алина & Артур",
+  "description": "Личный кабинет для двоих: игры, дневник, статистика, online мультиплеер.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Игры",       "url": "./#/games",        "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Дневник",    "url": "./#/diary",        "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Достижения", "url": "./#/achievements", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
