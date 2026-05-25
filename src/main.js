@@ -82,7 +82,27 @@ startRouter();
 
 // ── service worker (PWA / offline) ─────────────────────────────
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  const SW_BUILD = "20260525-v3";
+  let reloaded = false;
+
   addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+
+    navigator.serviceWorker.register(`./sw.js?v=${SW_BUILD}`).then((reg) => {
+      reg.update();
+      if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      reg.addEventListener("updatefound", () => {
+        const worker = reg.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            worker.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }

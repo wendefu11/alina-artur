@@ -1,5 +1,5 @@
 // ─────────────────────────  UI / ONLINE GATE  ─────────────────────────
-// Два действия: создать комнату / подключиться к партнёру. Без кодов.
+// Создать комнату / подключиться. Без кодов — партнёр получает баннер «Присоединиться».
 
 import { el } from "../core/dom.js";
 import { toast } from "../core/toast.js";
@@ -17,34 +17,48 @@ export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
   }
 
   const partner = partnerOf(profile);
+  const gameTitle = CATALOG[gameId]?.title || title || gameId;
   const status = el("div", { class: "lobby-status muted" }, "Подключитесь друг к другу.");
+  const hint = el("p", { class: "muted online-gate-hint" },
+    `Один нажимает «Создать комнату» — ${partner} увидит уведомление с кнопкой «Присоединиться». Коды не нужны.`,
+  );
 
   const hostBtn = el("button", { type: "button", class: "cta-btn" });
   const joinBtn = el("button", { type: "button", class: "cta-btn secondary" });
+  let inviteTimer = null;
 
   hostBtn.textContent = "🏠 Создать комнату";
   joinBtn.textContent = `🔗 Подключиться к ${partner}`;
+
+  function clearInviteTimer() {
+    if (inviteTimer) { clearInterval(inviteTimer); inviteTimer = null; }
+  }
 
   hostBtn.onclick = async () => {
     try {
       hostBtn.disabled = joinBtn.disabled = true;
       status.textContent = "Создаю комнату…";
+      hint.textContent = `Отправляем приглашение ${partner}…`;
       getCurrentRoom()?.leave?.();
+      clearInviteTimer();
+
       const room = new Room({ profile });
       setCurrentRoom(room);
       await room.hostRoom({ gameId, profile });
-      const gameTitle = CATALOG[gameId]?.title || title || gameId;
+
       toast(`${profile} создал${profile === "Алина" ? "а" : ""} комнату в «${gameTitle}». Жди ${partner}.`);
-      status.textContent = `Ждём ${partner} в «${gameTitle}»…`;
+      status.textContent = `Ждём ${partner}…`;
+      hint.textContent = `${partner} получит уведомление «${profile} создал${profile === "Алина" ? "а" : ""} комнату · ${gameTitle}» — пусть нажмёт «Присоединиться».`;
 
       const pingInvite = () => sendInvite({ toProfile: partner, gameId, host: profile, title: gameTitle }).catch(() => {});
       pingInvite();
-      const inviteTimer = setInterval(pingInvite, 20000);
+      inviteTimer = setInterval(pingInvite, 20000);
 
       room.on(MSG.Hello, ({ name }) => {
-        clearInterval(inviteTimer);
+        clearInviteTimer();
         toast(`🟢 ${name} подключился!`);
         status.textContent = `🟢 ${name} в комнате`;
+        hint.textContent = "На связи — начинаем!";
         cancelInvite(partner, gameId).catch(() => {});
         hideInviteBanner();
       });
@@ -54,13 +68,17 @@ export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
           onConnected?.();
         }
         if (s === "error" || s === "closed") {
+          clearInviteTimer();
           status.textContent = s === "error" ? "Ошибка соединения." : "Соединение закрыто.";
+          hint.textContent = `Один — «Создать комнату», ${partner} — «Присоединиться» или баннер.`;
           hostBtn.disabled = joinBtn.disabled = false;
         }
       });
     } catch (e) {
       console.error(e);
+      clearInviteTimer();
       status.textContent = "Не удалось создать: " + (e?.message || "");
+      hint.textContent = `Один — «Создать комнату», ${partner} — «Присоединиться» или баннер.`;
       hostBtn.disabled = joinBtn.disabled = false;
     }
   };
@@ -69,7 +87,10 @@ export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
     try {
       hostBtn.disabled = joinBtn.disabled = true;
       status.textContent = `Подключаюсь к ${partner}…`;
+      hint.textContent = `Если ${partner} ещё не создал комнату — попроси нажать «Создать комнату».`;
       getCurrentRoom()?.leave?.();
+      clearInviteTimer();
+
       const room = new Room({ profile });
       setCurrentRoom(room);
       await room.joinPartner({ gameId, partnerProfile: partner });
@@ -78,11 +99,13 @@ export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
         const who = host || partner;
         toast(`${who} создал${who === "Алина" ? "а" : ""} комнату — ты подключился!`);
         status.textContent = `🟢 На связи с ${who}`;
+        hint.textContent = "На связи — начинаем!";
       });
       room.onStatus((s) => {
         if (s === "open") onConnected?.();
         if (s === "error") {
-          status.textContent = `${partner} ещё не создал комнату. Попроси нажать «Создать».`;
+          status.textContent = `${partner} ещё не создал комнату. Жди уведомление или попроси нажать «Создать».`;
+          hint.textContent = `Когда ${partner} создаст комнату, появится баннер «Присоединиться».`;
           hostBtn.disabled = joinBtn.disabled = false;
         }
         if (s === "closed") {
@@ -100,8 +123,9 @@ export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
   return el("div", { class: "online-gate card" },
     el("div", { class: "card-head" },
       el("div", {},
-        el("h2", {}, title || "Online"),
-        el("p", { class: "muted" }, `Один — «Создать комнату», ${partner} — «Подключиться». Коды не нужны.`),
+        el("div", { class: "eyebrow" }, el("span", { class: "dot" }), "Online · " + gameTitle),
+        el("h2", {}, gameTitle),
+        hint,
       ),
     ),
     el("div", { class: "online-gate-actions" }, hostBtn, joinBtn),

@@ -1016,39 +1016,16 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
 .mode-chip:hover { color: var(--text); border-color: var(--accent); }
 .mode-chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: 0 10px 24px -10px rgba(255,93,143,.5); }
 
-/* ── lobby modal ──────────────────────────────────────── */
-.lobby-card { max-width: 520px; }
-.lobby-host, .lobby-join { display: flex; gap: 10px; margin: 14px 0; }
-.lobby-host .cta-btn { flex: 1; }
-.lobby-join { align-items: stretch; }
-.lobby-input { flex: 1; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700; font-family: "Space Grotesk", sans-serif; }
-.lobby-or {
-  text-align: center; color: var(--text-2); font-size: 12px;
-  text-transform: uppercase; letter-spacing: .2em; margin: 8px 0;
-  position: relative;
-}
-.lobby-or::before, .lobby-or::after {
-  content: ""; position: absolute; top: 50%; width: 40%; height: 1px;
-  background: var(--line);
-}
-.lobby-or::before { left: 0; }
-.lobby-or::after  { right: 0; }
-.lobby-codebox {
-  margin-top: 14px;
-  padding: 16px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(255,93,143,.08), rgba(167,139,250,.08));
-  border: 1px solid var(--line);
-}
-.lobby-code {
-  font-family: "Space Grotesk", "Courier New", monospace;
-  font-size: 38px; font-weight: 800; letter-spacing: 0.2em;
-  text-align: center;
-  background: var(--accent-grad);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  margin-bottom: 10px;
-}
+/* ── online gate ──────────────────────────────────────── */
 .lobby-status { text-align: center; margin-top: 12px; font-size: 14px; }
+.online-gate { margin-bottom: 0; }
+.online-gate-hint { margin: 8px 0 0; line-height: 1.45; }
+.online-gate-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;
+}
+@media (max-width: 540px) {
+  .online-gate-actions { grid-template-columns: 1fr; }
+}
 .row-center { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 /* ── achievements grid ─────────────────────────────────── */
@@ -1223,14 +1200,6 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
 }
 .durak-online-bar.warn { border-color: rgba(255,154,118,.35); background: linear-gradient(135deg, rgba(255,154,118,.10), rgba(167,139,250,.06)); }
 .durak-online-bar p { margin: 4px 0 0; width: 100%; }
-
-.online-gate { margin-bottom: 0; }
-.online-gate-actions {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;
-}
-@media (max-width: 540px) {
-  .online-gate-actions { grid-template-columns: 1fr; }
-}
 
 .durak-online-dot {
   width: 10px; height: 10px; border-radius: 50%; background: #6ee7a0;
