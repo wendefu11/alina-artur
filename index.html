@@ -1,121 +1,155 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="aurora">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1a0b1a">
-  <meta name="description" content="Алина и Артур — приватный игровой кабинет для двоих. Игры, статистика, дневник любви.">
-  <title>Алина · Артур — Private Lounge</title>
-
+  <meta name="color-scheme" content="dark light">
+  <title>Алина & Артур · Private Lounge</title>
+  <meta name="description" content="Личный кабинет для двоих: игры, дневник, статистика, романтика. Только мы.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%99%A5%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>💞</text></svg>">
 </head>
-<body class="theme-aurora">
-
-  <div id="aurora" class="aurora" aria-hidden="true">
-    <span class="aurora-blob a1"></span>
-    <span class="aurora-blob a2"></span>
-    <span class="aurora-blob a3"></span>
-    <span class="aurora-blob a4"></span>
-    <div class="aurora-grain"></div>
+<body>
+  <!-- Animated background layers -->
+  <div class="bg-aurora" aria-hidden="true">
+    <span class="aurora a1"></span>
+    <span class="aurora a2"></span>
+    <span class="aurora a3"></span>
+    <span class="aurora a4"></span>
+    <div class="grain"></div>
   </div>
 
-  <canvas id="hearts" class="hearts-layer" aria-hidden="true"></canvas>
+  <!-- Confetti host -->
+  <canvas id="confetti" class="confetti-canvas" aria-hidden="true"></canvas>
 
-  <!-- Login Screen -->
-  <section id="loginScreen" class="login-screen">
-    <div class="login-inner">
-      <div class="login-brand">
-        <span class="brand-mark">A&amp;A</span>
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Login overlay -->
+  <div id="loginOverlay" class="overlay hidden">
+    <div class="overlay-card">
+      <div class="eyebrow"><span class="dot"></span>Вход</div>
+      <h2 class="display">Кто здесь сегодня?</h2>
+      <p class="muted">Сайт запомнит выбор на этом устройстве. Сменить можно в настройках в любой момент.</p>
+      <div class="profile-grid big">
+        <button class="profile-card alina" data-login="Алина">
+          <span class="avatar">А</span>
+          <strong>Алина</strong>
+          <small>Открыть мой кабинет</small>
+          <span class="card-shine"></span>
+        </button>
+        <button class="profile-card artur" data-login="Артур">
+          <span class="avatar">А</span>
+          <strong>Артур</strong>
+          <small>Открыть мой кабинет</small>
+          <span class="card-shine"></span>
+        </button>
+      </div>
+      <p class="overlay-foot muted">Данные хранятся только в твоём браузере. Никаких аккаунтов.</p>
+    </div>
+  </div>
+
+  <!-- App shell -->
+  <div id="app" class="app-shell hidden">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">
+          <span class="logo-heart"></span>
+        </span>
         <div class="brand-text">
-          <small>Private Lounge · 2026</small>
-          <h1>Только для двоих<span class="cursor-blink">|</span></h1>
-          <p>Выбери, кто заходит. Сайт запомнит профиль на этом устройстве и встретит тебя в следующий раз.</p>
+          <span class="brand-title">Алина<span class="amp">&</span>Артур</span>
+          <span class="brand-sub" id="brandDay">…</span>
         </div>
       </div>
-
-      <div class="login-cards">
-        <button class="login-card login-card--alina" data-login="Алина">
-          <div class="login-card-bg"></div>
-          <div class="login-card-inner">
-            <span class="login-avatar">А</span>
-            <h2>Алина</h2>
-            <p>Королева красоты, побед и капризов</p>
-            <span class="login-enter">Войти <span class="arrow">→</span></span>
-          </div>
-        </button>
-        <button class="login-card login-card--artur" data-login="Артур">
-          <div class="login-card-bg"></div>
-          <div class="login-card-inner">
-            <span class="login-avatar">А</span>
-            <h2>Артур</h2>
-            <p>Герой камбэков, романтик и стратег</p>
-            <span class="login-enter">Войти <span class="arrow">→</span></span>
-          </div>
-        </button>
-      </div>
-
-      <div class="login-foot">
-        <span class="dot"></span>
-        <span>Сохраняется только в твоём браузере. Никаких серверов, никаких слежек.</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Main App -->
-  <main id="app" class="app hidden">
-    <aside class="sidebar">
-      <button class="brand" data-route="home">
-        <span class="brand-mark">A&amp;A</span>
-        <div>
-          <strong>Алина · Артур</strong>
-          <small>Private Lounge</small>
-        </div>
-      </button>
-
-      <nav class="nav">
-        <button class="nav-item" data-route="home"><span class="nav-ico">✦</span><span>Главная</span></button>
-        <button class="nav-item" data-route="games"><span class="nav-ico">◆</span><span>Игры</span></button>
-        <button class="nav-item" data-route="journal"><span class="nav-ico">♡</span><span>Дневник</span></button>
-        <button class="nav-item" data-route="stats"><span class="nav-ico">▲</span><span>Статистика</span></button>
-        <button class="nav-item" data-route="settings"><span class="nav-ico">⚙</span><span>Настройки</span></button>
+      <nav class="nav" id="navTop">
+        <a href="#/home"  data-route="home"    class="nav-link">Главная</a>
+        <a href="#/games" data-route="games"   class="nav-link">Игры</a>
+        <a href="#/diary" data-route="diary"   class="nav-link">Дневник</a>
+        <a href="#/stats" data-route="stats"   class="nav-link">Статистика</a>
       </nav>
-
-      <div class="sidebar-foot">
-        <button class="me-chip" id="meChip">
-          <span class="me-avatar" id="meAvatar">А</span>
-          <div>
-            <small>Сейчас в кабинете</small>
-            <strong id="meName">—</strong>
-          </div>
-          <span class="me-arrow">⇄</span>
+      <div class="top-actions">
+        <button id="quickGameBtn" class="pill-btn"><span>🎲</span> Случайная игра</button>
+        <button id="settingsBtn" class="icon-btn" aria-label="Настройки">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.08A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06A2 2 0 1 1 4.24 16.97l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.08A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06A2 2 0 1 1 7.07 4.24l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 0 1 4 0v.08A1.7 1.7 0 0 0 15 4.64a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.08A1.7 1.7 0 0 0 19.4 15z"/></svg>
+        </button>
+        <button id="profileBadge" class="profile-badge" aria-label="Текущий профиль">
+          <span class="badge-avatar" id="badgeAvatar">А</span>
+          <span id="badgeName">Профиль</span>
         </button>
       </div>
-    </aside>
+    </header>
 
-    <div class="content">
-      <header class="topbar">
-        <div class="crumb">
-          <span id="crumbTitle">Главная</span>
-          <small id="crumbSub">Добро пожаловать</small>
-        </div>
-        <div class="topbar-actions">
-          <button class="icon-btn" id="themeBtn" title="Сменить тему">◐</button>
-          <button class="icon-btn" id="muteBtn" title="Звук">♪</button>
-          <button class="icon-btn icon-btn--accent" id="surpriseBtn" title="Сюрприз">✦</button>
-        </div>
-      </header>
+    <main id="view" class="view"></main>
 
-      <div id="view" class="view"></div>
+    <!-- Mobile bottom nav -->
+    <nav class="bottom-nav" id="navBottom">
+      <a href="#/home"  data-route="home"  class="nav-link"><span>🏠</span><small>Главная</small></a>
+      <a href="#/games" data-route="games" class="nav-link"><span>🎮</span><small>Игры</small></a>
+      <a href="#/diary" data-route="diary" class="nav-link"><span>📓</span><small>Дневник</small></a>
+      <a href="#/stats" data-route="stats" class="nav-link"><span>📊</span><small>Статистика</small></a>
+    </nav>
+
+    <footer class="footnote muted">
+      Сделано с любовью. <span id="loveLine"></span>
+    </footer>
+  </div>
+
+  <!-- Settings drawer -->
+  <aside id="settingsDrawer" class="drawer hidden" aria-hidden="true">
+    <div class="drawer-backdrop" data-close-drawer></div>
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <div class="eyebrow"><span class="dot"></span>Настройки</div>
+          <h2 class="display">Только для тебя</h2>
+        </div>
+        <button class="icon-btn" data-close-drawer aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <section class="drawer-block">
+        <h3>Профиль</h3>
+        <div class="profile-grid">
+          <button class="profile-card alina mini" data-switch="Алина"><span class="avatar">А</span><strong>Алина</strong><small>Активный кабинет</small></button>
+          <button class="profile-card artur mini" data-switch="Артур"><span class="avatar">А</span><strong>Артур</strong><small>Активный кабинет</small></button>
+        </div>
+      </section>
+
+      <section class="drawer-block">
+        <h3>Тема</h3>
+        <div class="theme-grid">
+          <button class="theme-card" data-theme="aurora"><span class="theme-swatch sw-aurora"></span><strong>Aurora</strong><small>Тёмная романтика</small></button>
+          <button class="theme-card" data-theme="dawn"><span class="theme-swatch sw-dawn"></span><strong>Dawn</strong><small>Светлая и тёплая</small></button>
+          <button class="theme-card" data-theme="noir"><span class="theme-swatch sw-noir"></span><strong>Noir</strong><small>Глубокая ночь</small></button>
+        </div>
+      </section>
+
+      <section class="drawer-block">
+        <h3>Наша дата</h3>
+        <p class="muted">Дата, с которой считаем дни вместе.</p>
+        <input id="startDateInput" type="date" class="text-input">
+      </section>
+
+      <section class="drawer-block">
+        <h3>Данные</h3>
+        <div class="row-2">
+          <button id="exportBtn" class="cta-btn secondary">⬇ Экспорт</button>
+          <label class="cta-btn ghost" for="importInput">⬆ Импорт</label>
+          <input id="importInput" type="file" accept="application/json" hidden>
+        </div>
+        <button id="resetBtn" class="cta-btn danger">Стереть всё</button>
+      </section>
+
+      <section class="drawer-block">
+        <button id="logoutBtn" class="cta-btn ghost wide">Выйти из профиля</button>
+      </section>
     </div>
-  </main>
-
-  <!-- Templates rendered dynamically by app.js -->
-  <div id="toast" class="toast hidden"></div>
+  </aside>
 
   <script type="module" src="./app.js"></script>
 </body>

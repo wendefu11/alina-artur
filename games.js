@@ -4,6 +4,7 @@
 import { el, $, $$, pickRandom } from "./app.js";
 import {
   TRUTHS, DARES, COMPLIMENTS, COUPLE_QUIZ, WHEEL_TASKS, HANGMAN_WORDS, MEMORY_ICONS,
+  SIMON_COLORS, SLIDE_SIZE,
 } from "./data.js";
 
 export function mountGame(id, host, ctx) {
@@ -1054,6 +1055,357 @@ function mountLoveMeter(host, ctx) {
   );
 }
 
+// ─────────────────────────  SIMON SAYS  ─────────────────────────
+function mountSimon(host, ctx) {
+  let seq = [];
+  let userIdx = 0;
+  let playing = false;
+  let best = ctx.state.highScores[ctx.profile]?.simon || 0;
+
+  let audioCtx = null;
+  function tone(freq, duration = 280) {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration / 1000);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + duration / 1000 + 0.02);
+    } catch (e) {}
+  }
+
+  function renderScore() {
+    ctx.scoreboardEl.innerHTML = "";
+    ctx.scoreboardEl.append(
+      scoreChip("Раунд", seq.length),
+      scoreChip("Рекорд", best),
+    );
+  }
+
+  const stage = el("div", { class: "simon-stage" });
+  const pads = SIMON_COLORS.map((s, i) => el("button", {
+    class: `simon-pad s${i}`,
+    onclick: () => userPress(i),
+  }));
+  pads.forEach(p => stage.append(p));
+  const center = el("div", { class: "simon-center" }, "Старт");
+  stage.append(center);
+  host.append(stage,
+    el("p", { style: "text-align:center;color:var(--text-2);margin-top:14px" }, "Повтори последовательность. С каждым раундом — на один сигнал длиннее."),
+    el("button", { class: "cta-btn", style: "margin:14px auto 0;display:block", onclick: nextRound }, "Начать"),
+  );
+
+  async function flash(i, ms = 360) {
+    pads[i].classList.add("lit");
+    tone(SIMON_COLORS[i].tone, ms - 20);
+    await new Promise(r => setTimeout(r, ms));
+    pads[i].classList.remove("lit");
+    await new Promise(r => setTimeout(r, 120));
+  }
+
+  async function playSequence() {
+    playing = true;
+    center.textContent = "Смотри";
+    for (const i of seq) await flash(i);
+    playing = false;
+    userIdx = 0;
+    center.textContent = "Повторяй";
+  }
+
+  function nextRound() {
+    seq.push(Math.floor(Math.random() * 4));
+    renderScore();
+    setTimeout(playSequence, 250);
+  }
+
+  async function userPress(i) {
+    if (playing) return;
+    if (seq.length === 0) { nextRound(); return; }
+    await flash(i, 220);
+    if (seq[userIdx] !== i) {
+      center.textContent = "Ой!";
+      tone(120, 400);
+      if (seq.length - 1 > best) {
+        best = seq.length - 1;
+        ctx.recordHighScore(ctx.profile, "simon", best);
+        ctx.confettiBurst({ count: 30 });
+      }
+      ctx.toast(`Конец на раунде ${seq.length}`);
+      seq = []; userIdx = 0;
+      renderScore();
+      return;
+    }
+    userIdx++;
+    if (userIdx >= seq.length) {
+      center.textContent = "Класс!";
+      setTimeout(nextRound, 700);
+    }
+  }
+  renderScore();
+}
+
+// ─────────────────────────  WHACK A MOLE  ─────────────────────────
+function mountWhack(host, ctx) {
+  const SIZE = 9; // 3x3
+  let score = 0;
+  let time = 30;
+  let running = false;
+  let popInterval, tickInterval;
+  let best = ctx.state.highScores[ctx.profile]?.whack || 0;
+
+  function renderScore() {
+    ctx.scoreboardEl.innerHTML = "";
+    ctx.scoreboardEl.append(
+      scoreChip("Очки", score),
+      scoreChip("Время", time),
+      scoreChip("Рекорд", best),
+    );
+  }
+
+  const grid = el("div", { class: "whack-grid" });
+  const moles = [];
+  for (let i = 0; i < SIZE; i++) {
+    const mole = el("div", { class: "whack-mole" }, "🐹");
+    const hole = el("div", { class: "whack-hole", onclick: () => bonk(i) }, mole);
+    moles.push({ mole, hole, up: false });
+    grid.append(hole);
+  }
+
+  function bonk(i) {
+    if (!running) return;
+    const m = moles[i];
+    if (!m.up) return;
+    m.up = false;
+    m.mole.classList.add("bonk");
+    setTimeout(() => { m.mole.classList.remove("bonk", "up"); }, 250);
+    score++;
+    renderScore();
+    ctx.confettiBurst({ count: 6 });
+  }
+
+  function popRandom() {
+    if (!running) return;
+    const i = Math.floor(Math.random() * SIZE);
+    const m = moles[i];
+    if (m.up) return;
+    m.up = true;
+    m.mole.classList.add("up");
+    setTimeout(() => {
+      if (m.up) { m.up = false; m.mole.classList.remove("up"); }
+    }, 600 + Math.random() * 600);
+  }
+
+  function start() {
+    score = 0; time = 30; running = true;
+    renderScore();
+    btn.disabled = true; btn.textContent = "Поехали!";
+    popInterval = setInterval(popRandom, 550);
+    tickInterval = setInterval(() => {
+      time--;
+      renderScore();
+      if (time <= 0) {
+        running = false;
+        clearInterval(popInterval); clearInterval(tickInterval);
+        moles.forEach(m => { m.up = false; m.mole.classList.remove("up"); });
+        const improved = ctx.recordHighScore(ctx.profile, "whack", score);
+        if (improved) { best = score; ctx.confettiBurst({ count: 60 }); ctx.toast("Новый рекорд!"); }
+        btn.disabled = false; btn.textContent = "Ещё раз";
+        renderScore();
+      }
+    }, 1000);
+  }
+
+  const btn = el("button", { class: "cta-btn", style: "margin:14px auto 0;display:block", onclick: start }, "Старт");
+  host.append(grid, el("p", { style: "text-align:center;color:var(--text-2);margin-top:14px" }, "30 секунд. Тапай моль как только она выпрыгнула."), btn);
+  ctx.registerCleanup(() => { clearInterval(popInterval); clearInterval(tickInterval); running = false; });
+  renderScore();
+}
+
+// ─────────────────────────  15-PUZZLE  ─────────────────────────
+function mountSlide(host, ctx) {
+  const N = SLIDE_SIZE;
+  let board = Array.from({ length: N * N }, (_, i) => (i + 1) % (N * N)); // 0 = empty
+  let moves = 0;
+  let best = ctx.state.highScores[ctx.profile]?.slide || 9999;
+  let won = false;
+
+  function renderScore() {
+    ctx.scoreboardEl.innerHTML = "";
+    ctx.scoreboardEl.append(
+      scoreChip("Ходы", moves),
+      scoreChip("Лучшее", best === 9999 ? "—" : best),
+    );
+  }
+
+  function shuffle() {
+    moves = 0; won = false;
+    let emptyIdx = N * N - 1;
+    for (let i = 0; i < 200; i++) {
+      const neighbours = [];
+      const r = Math.floor(emptyIdx / N), c = emptyIdx % N;
+      if (r > 0)     neighbours.push(emptyIdx - N);
+      if (r < N - 1) neighbours.push(emptyIdx + N);
+      if (c > 0)     neighbours.push(emptyIdx - 1);
+      if (c < N - 1) neighbours.push(emptyIdx + 1);
+      const m = neighbours[Math.floor(Math.random() * neighbours.length)];
+      [board[emptyIdx], board[m]] = [board[m], board[emptyIdx]];
+      emptyIdx = m;
+    }
+  }
+
+  function move(i) {
+    if (won) return;
+    const emptyIdx = board.indexOf(0);
+    const r1 = Math.floor(i / N), c1 = i % N;
+    const r2 = Math.floor(emptyIdx / N), c2 = emptyIdx % N;
+    if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
+    [board[i], board[emptyIdx]] = [board[emptyIdx], board[i]];
+    moves++;
+    render();
+    if (board.every((v, idx) => v === (idx + 1) % (N * N))) {
+      won = true;
+      ctx.confettiBurst({ count: 80 });
+      ctx.toast(`Собрано за ${moves} ходов!`);
+      const improved = ctx.recordHighScore(ctx.profile, "slide", moves, true);
+      if (improved) best = moves;
+    }
+    renderScore();
+  }
+
+  const wrap = el("div", { class: "slide-grid", style: `grid-template-columns: repeat(${N}, 1fr)` });
+  function render() {
+    wrap.innerHTML = "";
+    board.forEach((v, i) => {
+      const tile = el("div", {
+        class: "slide-tile" + (v === 0 ? " empty" : ""),
+        onclick: () => v && move(i),
+      }, v === 0 ? "" : String(v));
+      wrap.append(tile);
+    });
+  }
+  shuffle(); render();
+
+  host.append(wrap,
+    el("p", { style: "text-align:center;color:var(--text-2);margin-top:14px" }, "Собери порядок 1 → 15 (или 1 → " + (N*N-1) + "). Меньше ходов — лучше."),
+    el("div", { style: "display:flex;justify-content:center;gap:10px;margin-top:14px" },
+      el("button", { class: "cta-btn", onclick: () => { shuffle(); render(); renderScore(); } }, "Перемешать"),
+    ),
+  );
+  renderScore();
+}
+
+// ─────────────────────────  MINESWEEPER  ─────────────────────────
+function mountMine(host, ctx) {
+  const W = 9, H = 9, MINES = 10;
+  let board, opened, flagged;
+  let gameOver = false, won = false;
+
+  function reset() {
+    gameOver = false; won = false;
+    board = Array.from({ length: H }, () => Array(W).fill(0));
+    opened = Array.from({ length: H }, () => Array(W).fill(false));
+    flagged = Array.from({ length: H }, () => Array(W).fill(false));
+    let placed = 0;
+    while (placed < MINES) {
+      const r = Math.floor(Math.random() * H), c = Math.floor(Math.random() * W);
+      if (board[r][c] === -1) continue;
+      board[r][c] = -1; placed++;
+    }
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      if (board[r][c] === -1) continue;
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nc < 0 || nr >= H || nc >= W) continue;
+        if (board[nr][nc] === -1) n++;
+      }
+      board[r][c] = n;
+    }
+  }
+
+  function openCell(r, c) {
+    if (r < 0 || c < 0 || r >= H || c >= W) return;
+    if (opened[r][c] || flagged[r][c]) return;
+    opened[r][c] = true;
+    if (board[r][c] === -1) { gameOver = true; return; }
+    if (board[r][c] === 0) {
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        openCell(r + dr, c + dc);
+      }
+    }
+  }
+
+  function checkWin() {
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      if (board[r][c] !== -1 && !opened[r][c]) return false;
+    }
+    return true;
+  }
+
+  function renderScore() {
+    let flags = 0; for (const row of flagged) for (const f of row) if (f) flags++;
+    ctx.scoreboardEl.innerHTML = "";
+    ctx.scoreboardEl.append(
+      scoreChip("Флаги", `${flags} / ${MINES}`),
+      scoreChip("Статус", gameOver ? "Бум 💥" : won ? "Победа!" : "Идём"),
+    );
+  }
+
+  const grid = el("div", { class: "mine-grid", style: `grid-template-columns: repeat(${W}, 1fr)` });
+  function render() {
+    grid.innerHTML = "";
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const isOpen = opened[r][c];
+      const isFlag = flagged[r][c];
+      const v = board[r][c];
+      const cls = "mine-cell"
+        + (isOpen ? " opened" : "")
+        + (isFlag && !isOpen ? " flag" : "")
+        + (isOpen && v === -1 ? " boom" : "");
+      const txt = isOpen ? (v === -1 ? "💣" : (v > 0 ? String(v) : "")) : "";
+      const cell = el("div", {
+        class: cls,
+        dataset: isOpen && v > 0 ? { n: String(v) } : {},
+        onclick: () => {
+          if (gameOver || won) return;
+          if (isFlag) return;
+          openCell(r, c);
+          if (gameOver) {
+            for (let rr = 0; rr < H; rr++) for (let cc = 0; cc < W; cc++) {
+              if (board[rr][cc] === -1) opened[rr][cc] = true;
+            }
+            ctx.toast("Бум! Попробуй ещё.");
+          } else if (checkWin()) {
+            won = true;
+            ctx.confettiBurst({ count: 80 });
+            ctx.toast("Очищено! 💎");
+          }
+          render(); renderScore();
+        },
+        oncontextmenu: (e) => {
+          e.preventDefault();
+          if (gameOver || won || opened[r][c]) return;
+          flagged[r][c] = !flagged[r][c];
+          render(); renderScore();
+        },
+      }, txt);
+      grid.append(cell);
+    }
+  }
+  reset(); render();
+
+  host.append(grid,
+    el("p", { style: "text-align:center;color:var(--text-2);margin-top:14px" }, "Левый клик — открыть. Правый — флаг. Зажми и удерживай на телефоне."),
+    el("div", { style: "display:flex;justify-content:center;gap:10px;margin-top:14px" },
+      el("button", { class: "cta-btn", onclick: () => { reset(); render(); renderScore(); } }, "Новое поле"),
+    ),
+  );
+  renderScore();
+}
+
 // ─────────────────────────  DISPATCHER  ─────────────────────────
 const GAMES = {
   ttt: mountTTT,
@@ -1072,4 +1424,8 @@ const GAMES = {
   coin: mountCoin,
   dice: mountDice,
   love: mountLoveMeter,
+  simon: mountSimon,
+  whack: mountWhack,
+  slide: mountSlide,
+  mine: mountMine,
 };

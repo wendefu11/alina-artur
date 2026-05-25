@@ -1,632 +1,658 @@
-// Главный модуль: маршрутизация, профили, экраны, инициализация
-import * as store from "./storage.js";
-import * as data from "./data.js";
-import { toast, sound, celebrate, initHearts, typewriter, h, clear, fmtDate, partner } from "./ui.js";
+// ─────────────────────────  ALINA & ARTUR — APP CORE  ─────────────────────────
+// Router, layout, profile, settings, daily message, daily quote, mood, diary,
+// stats, wishes, and game mounting. Everything is static; everything is local.
 
-import { mount as mountTTT } from "./games/ttt.js";
-import { mount as mountConnect4 } from "./games/connect4.js";
-import { mount as mountRPS } from "./games/rps.js";
-import { mount as mountMemory } from "./games/memory.js";
-import { mount as mountHangman } from "./games/hangman.js";
-import { mount as mountPong } from "./games/pong.js";
-import { mount as mountSnake } from "./games/snake.js";
-import { mount as mount2048 } from "./games/g2048.js";
-import { mount as mountReaction } from "./games/reaction.js";
-import { mount as mountWheel } from "./games/wheel.js";
-import { mount as mountTruth } from "./games/truth.js";
-import { mount as mountQuiz } from "./games/quiz.js";
-import { mount as mountCompliment } from "./games/compliment.js";
-import { mount as mountCoin } from "./games/coin.js";
-import { mount as mountDice } from "./games/dice.js";
-import { mount as mountLove } from "./games/love.js";
+import {
+  load, save, recordMatch, recordHighScore as storageRecordHigh,
+  addQuizScore as storageAddQuiz, addDiary, removeDiary, setMood,
+  addWish, toggleWish, removeWish, exportJSON, importJSON, resetAll,
+} from "./storage.js";
+import { LOVE_LINES, DAILY_QUOTES, MOODS, WISHES } from "./data.js";
+import { mountGame } from "./games.js";
 
-const GAME_MOUNTERS = {
-  ttt: mountTTT, connect4: mountConnect4, rps: mountRPS, memory: mountMemory,
-  hangman: mountHangman, pong: mountPong, snake: mountSnake, g2048: mount2048,
-  reaction: mountReaction, wheel: mountWheel, truth: mountTruth, quiz: mountQuiz,
-  compliment: mountCompliment, coin: mountCoin, dice: mountDice, love: mountLove,
-};
+// ───── DOM helpers ─────────────────────────────────────────────────
+export const $  = (s, root = document) => root.querySelector(s);
+export const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
 
-const ROUTES = {
-  home: { title: "Главная", sub: "Добро пожаловать обратно" },
-  games: { title: "Игры", sub: "Выбери развлечение для двоих" },
-  journal: { title: "Дневник", sub: "Заметки, желания, мысли" },
-  stats: { title: "Статистика", sub: "Кто чаще выигрывает" },
-  settings: { title: "Настройки", sub: "Тема и личные данные" },
-};
+export function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
+    else if (k === "style") node.style.cssText = v;
+    else if (k === "html") node.innerHTML = v;
+    else if ((k === "data" || k === "dataset") && typeof v === "object") for (const [dk, dv] of Object.entries(v)) node.dataset[dk] = dv;
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k.startsWith("on") && typeof v !== "function") node[k] = v;
+    else if (v === true) node.setAttribute(k, "");
+    else node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c === undefined || c === null || c === false) continue;
+    if (c instanceof Node) node.appendChild(c);
+    else node.appendChild(document.createTextNode(String(c)));
+  }
+  return node;
+}
 
-let currentRoute = "home";
-let currentRouteData = null;
+export function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-// ── INIT ──
-function init() {
-  applyTheme();
-  initHearts();
-  bindLogin();
-  bindShell();
-  store.subscribe(() => {
-    applyTheme();
-    refreshShell();
-  });
+// ───── runtime state ───────────────────────────────────────────────
+export const state = load();
+const PROFILES = ["Алина", "Артур"];
+const partnerOf = (p) => p === "Алина" ? "Артур" : "Алина";
 
-  const s = store.getState();
-  if (s.profile) {
-    showApp();
-    go("home");
+// ───── elements ────────────────────────────────────────────────────
+const view = $("#view");
+const app = $("#app");
+const loginOverlay = $("#loginOverlay");
+const settingsDrawer = $("#settingsDrawer");
+const navTopLinks = $$("#navTop .nav-link");
+const navBottomLinks = $$("#navBottom .nav-link");
+
+// ───── BOOT ────────────────────────────────────────────────────────
+function boot() {
+  applyTheme(state.theme);
+  if (!state.profile) {
+    showLoginOverlay();
   } else {
-    showLogin();
+    enterApp();
   }
+  initLoginHandlers();
+  initDrawerHandlers();
+  initRouter();
+  startLoveTypewriter();
 }
 
-function applyTheme() {
-  const s = store.getState();
-  document.body.classList.remove("theme-aurora", "theme-dawn", "theme-noir");
-  document.body.classList.add("theme-" + (s.theme || "aurora"));
+function showLoginOverlay() {
+  loginOverlay.classList.remove("hidden");
+  app.classList.add("hidden");
 }
 
-function bindLogin() {
-  document.querySelectorAll("[data-login]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      store.setProfile(btn.dataset.login);
-      sound.heart();
-      showApp();
-      go("home");
+function enterApp() {
+  loginOverlay.classList.add("hidden");
+  app.classList.remove("hidden");
+  refreshBrandDay();
+  refreshBadge();
+  if (!location.hash) location.hash = "#/home";
+  else route();
+}
+
+function initLoginHandlers() {
+  $$("[data-login]").forEach(btn => btn.addEventListener("click", () => {
+    state.profile = btn.dataset.login;
+    save(state);
+    enterApp();
+    toast(`Привет, ${state.profile}!`);
+  }));
+}
+
+// ───── ROUTING ─────────────────────────────────────────────────────
+const routes = { home: viewHome, games: viewGames, diary: viewDiary, stats: viewStats };
+
+function initRouter() {
+  addEventListener("hashchange", route);
+}
+
+function route() {
+  if (!state.profile) { showLoginOverlay(); return; }
+  cleanupGame();
+  const slug = (location.hash.replace(/^#\/?/, "").split("/")[0]) || "home";
+  const handler = routes[slug] || viewHome;
+  navTopLinks.concat(navBottomLinks).forEach(a => a.classList.toggle("active", a.dataset.route === slug));
+  view.innerHTML = "";
+  view.append(handler());
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ───── DRAWER ──────────────────────────────────────────────────────
+function initDrawerHandlers() {
+  $("#settingsBtn").addEventListener("click", openDrawer);
+  $$("[data-close-drawer]").forEach(el => el.addEventListener("click", closeDrawer));
+
+  $$("[data-switch]").forEach(btn => btn.addEventListener("click", () => {
+    state.profile = btn.dataset.switch;
+    save(state);
+    refreshBadge();
+    refreshDrawerActive();
+    route();
+    closeDrawer();
+    toast(`Кабинет ${state.profile}`);
+  }));
+
+  $$("[data-theme]").forEach(btn => btn.addEventListener("click", () => {
+    state.theme = btn.dataset.theme;
+    save(state);
+    applyTheme(state.theme);
+    refreshDrawerActive();
+    toast(`Тема: ${state.theme}`);
+  }));
+
+  $("#startDateInput").addEventListener("change", (e) => {
+    state.startDate = e.target.value || state.startDate;
+    save(state);
+    refreshBrandDay();
+    toast("Дата сохранена");
+  });
+
+  $("#exportBtn").addEventListener("click", () => {
+    const data = exportJSON(state);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `alina-artur-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast("Файл сохранён");
+  });
+
+  $("#importInput").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const text = await file.text();
+    if (importJSON(text)) { toast("Импорт ок. Перезагружаю..."); setTimeout(()=>location.reload(), 600); }
+    else toast("Не получилось :(");
+  });
+
+  $("#resetBtn").addEventListener("click", () => {
+    if (confirm("Стереть все данные?")) { resetAll(); location.reload(); }
+  });
+
+  $("#logoutBtn").addEventListener("click", () => {
+    state.profile = ""; save(state);
+    closeDrawer(); showLoginOverlay();
+  });
+
+  $("#quickGameBtn").addEventListener("click", () => {
+    const all = Object.keys(GAME_CATALOG);
+    const pick = pickRandom(all);
+    location.hash = `#/games/${pick}`;
+  });
+
+  $("#profileBadge").addEventListener("click", openDrawer);
+}
+
+function openDrawer() {
+  settingsDrawer.classList.remove("hidden");
+  $("#startDateInput").value = state.startDate || "";
+  refreshDrawerActive();
+}
+function closeDrawer() { settingsDrawer.classList.add("hidden"); }
+
+function refreshDrawerActive() {
+  $$("[data-switch]").forEach(b => b.classList.toggle("active", b.dataset.switch === state.profile));
+  $$("[data-theme]").forEach(b => b.classList.toggle("active", b.dataset.theme === state.theme));
+}
+
+// ───── THEMES ──────────────────────────────────────────────────────
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t || "aurora";
+}
+
+// ───── BRAND / BADGE ───────────────────────────────────────────────
+function refreshBrandDay() {
+  const start = new Date(state.startDate || "2024-02-14");
+  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000));
+  $("#brandDay").textContent = `Вместе ${days} ${plural(days, "день","дня","дней")}`;
+}
+function refreshBadge() {
+  const p = state.profile || "Гость";
+  $("#badgeAvatar").textContent = p ? p[0] : "?";
+  $("#badgeName").textContent = p;
+  $("#profileBadge").dataset.profile = p;
+}
+function plural(n, one, few, many) {
+  n = Math.abs(n) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return many;
+  if (n1 > 1 && n1 < 5) return few;
+  if (n1 === 1) return one;
+  return many;
+}
+
+// ───── TYPEWRITER LOVE LINE ────────────────────────────────────────
+function startLoveTypewriter() {
+  const out = $("#loveLine");
+  const lines = LOVE_LINES;
+  let idx = Math.floor(Math.random() * lines.length);
+  let charPos = 0;
+  let dir = 1;
+  let line = lines[idx];
+  const tick = () => {
+    charPos += dir;
+    out.textContent = line.slice(0, charPos);
+    if (dir === 1 && charPos >= line.length) { dir = -1; setTimeout(tick, 1800); return; }
+    if (dir === -1 && charPos <= 0) { idx = (idx + 1) % lines.length; line = lines[idx]; dir = 1; setTimeout(tick, 250); return; }
+    setTimeout(tick, dir === 1 ? 38 : 18);
+  };
+  tick();
+}
+
+// ───── TOAST / CONFETTI ─────────────────────────────────────────────
+let toastTimer = null;
+export function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+let confettiCanvas, confettiCtx, confettiW, confettiH, confettiParticles = [], confettiRaf = null;
+function initConfetti() {
+  confettiCanvas = $("#confetti");
+  confettiCtx = confettiCanvas.getContext("2d");
+  resizeConfetti();
+  addEventListener("resize", resizeConfetti);
+}
+function resizeConfetti() {
+  const dpr = window.devicePixelRatio || 1;
+  confettiW = innerWidth; confettiH = innerHeight;
+  confettiCanvas.width = confettiW * dpr; confettiCanvas.height = confettiH * dpr;
+  confettiCanvas.style.width = confettiW + "px"; confettiCanvas.style.height = confettiH + "px";
+  confettiCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+export function confettiBurst({ count = 80, colors = ["#ff5d8f", "#a78bfa", "#22d3ee", "#fbbf24", "#34d399"] } = {}) {
+  for (let i = 0; i < count; i++) {
+    confettiParticles.push({
+      x: Math.random() * confettiW,
+      y: -20,
+      vx: (Math.random() - .5) * 8,
+      vy: 3 + Math.random() * 6,
+      g: 0.18,
+      size: 4 + Math.random() * 6,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - .5) * 0.3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 120 + Math.random() * 60,
     });
-  });
-}
-
-function showLogin() {
-  document.getElementById("loginScreen").classList.remove("hidden");
-  document.getElementById("app").classList.add("hidden");
-}
-function showApp() {
-  document.getElementById("loginScreen").classList.add("hidden");
-  document.getElementById("app").classList.remove("hidden");
-  refreshShell();
-}
-
-function refreshShell() {
-  const s = store.getState();
-  const p = s.profile;
-  if (!p) return;
-  const displayName = s.customNames?.[p] || p;
-  const avatar = document.getElementById("meAvatar");
-  const name = document.getElementById("meName");
-  if (avatar) {
-    avatar.textContent = displayName[0];
-    avatar.classList.toggle("is-artur", p === "Артур");
   }
-  if (name) name.textContent = displayName;
-
-  document.querySelectorAll(".nav-item").forEach(b => {
-    b.classList.toggle("active", b.dataset.route === currentRoute);
-  });
-
-  const info = ROUTES[currentRoute] || ROUTES.home;
-  document.getElementById("crumbTitle").textContent = info.title;
-  document.getElementById("crumbSub").textContent = info.sub;
+  if (!confettiRaf) confettiTick();
+}
+function confettiTick() {
+  confettiCtx.clearRect(0, 0, confettiW, confettiH);
+  for (const p of confettiParticles) {
+    p.vy += p.g; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life--;
+    confettiCtx.save();
+    confettiCtx.translate(p.x, p.y); confettiCtx.rotate(p.rot);
+    confettiCtx.fillStyle = p.color;
+    confettiCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.5);
+    confettiCtx.restore();
+  }
+  confettiParticles = confettiParticles.filter(p => p.life > 0 && p.y < confettiH + 60);
+  if (confettiParticles.length) confettiRaf = requestAnimationFrame(confettiTick);
+  else { confettiRaf = null; confettiCtx.clearRect(0, 0, confettiW, confettiH); }
 }
 
-function bindShell() {
-  document.querySelectorAll("[data-route]").forEach(b => {
-    b.addEventListener("click", () => go(b.dataset.route));
-  });
-  document.getElementById("themeBtn")?.addEventListener("click", cycleTheme);
-  document.getElementById("muteBtn")?.addEventListener("click", toggleMute);
-  document.getElementById("meChip")?.addEventListener("click", () => go("settings"));
-  document.getElementById("surpriseBtn")?.addEventListener("click", surprise);
-}
+// ───── GAME CATALOG ────────────────────────────────────────────────
+const GAME_CATALOG = {
+  ttt:        { title: "Крестики-нолики", icon: "✕◯", sub: "Классика на двоих",            tag: "duo",  grad: "linear-gradient(135deg, rgba(255,93,143,.18), rgba(167,139,250,.10))" },
+  connect4:   { title: "Connect 4",       icon: "🔴", sub: "Четыре в ряд — за вертикальной сеткой", tag: "duo", grad: "linear-gradient(135deg, rgba(96,165,250,.20), rgba(167,139,250,.10))" },
+  rps:        { title: "Камень-Ножницы-Бумага", icon: "✊✋✌", sub: "Скрытый выбор и быстрая партия", tag: "duo" },
+  memory:     { title: "Память",          icon: "🃏", sub: "Найди пару — кто больше пар",  tag: "duo" },
+  hangman:    { title: "Виселица",        icon: "🎯", sub: "Угадай слово до 7 ошибок",     tag: "duo" },
+  pong:       { title: "Pong",            icon: "🏓", sub: "W/S vs ↑/↓ — до 5 очков",      tag: "duo" },
+  simon:      { title: "Simon Says",      icon: "🎵", sub: "Повтори световую цепочку",     tag: "solo" },
+  whack:      { title: "Поймай момент",   icon: "🐹", sub: "Реакция на скорости",          tag: "solo" },
+  slide:      { title: "15-Пятнашки",     icon: "🔢", sub: "Собери порядок 1-15",          tag: "solo" },
+  mine:       { title: "Минёр",           icon: "💣", sub: "Открой клетки, не нарвись",    tag: "solo" },
+  snake:      { title: "Змейка",          icon: "🐍", sub: "Лучший счёт на профиль",       tag: "solo" },
+  g2048:      { title: "2048",            icon: "🧮", sub: "Свайпы. Собирай степени двойки", tag: "solo" },
+  reaction:   { title: "Реакция",         icon: "⚡", sub: "Тапни как только загорится зелёный", tag: "solo" },
+  wheel:      { title: "Колесо решений",  icon: "🎡", sub: "Что делаем — пусть решит судьба", tag: "pair" },
+  truth:      { title: "Правда или Действие", icon: "💌", sub: "Тёплые вопросы и заявки",  tag: "pair" },
+  compliment: { title: "Машина комплиментов", icon: "💖", sub: "Тёплая фраза на каждый день", tag: "pair" },
+  quiz:       { title: "Couple Quiz",     icon: "❓", sub: "Насколько хорошо вы друг друга знаете", tag: "pair" },
+  coin:       { title: "Монетка",         icon: "🪙", sub: "Орёл / Решка",                 tag: "pair" },
+  dice:       { title: "Кубики",          icon: "🎲", sub: "1-6 для решений",              tag: "pair" },
+  love:       { title: "Love-O-Meter",    icon: "💘", sub: "Сколько % любви прямо сейчас", tag: "pair" },
+};
+const GAME_FILTERS = {
+  all:  "Все",
+  duo:  "Вдвоём за устройством",
+  solo: "Соло (рекорды)",
+  pair: "Для пары",
+};
 
-function cycleTheme() {
-  const order = ["aurora", "dawn", "noir"];
-  const s = store.getState();
-  const i = order.indexOf(s.theme || "aurora");
-  store.setTheme(order[(i + 1) % order.length]);
-  sound.click();
-  toast("Тема: " + (store.getState().theme === "dawn" ? "Рассветная" : store.getState().theme === "noir" ? "Полночь" : "Аврора"));
-}
-function toggleMute() {
-  store.setMuted(!store.getState().muted);
-  document.getElementById("muteBtn").textContent = store.getState().muted ? "♪̸" : "♪";
-  toast(store.getState().muted ? "Звук выключен" : "Звук включён");
-}
+// ───── VIEWS ───────────────────────────────────────────────────────
 
-function surprise() {
-  const tasks = [
-    () => {
-      const q = data.LOVE_QUOTES[Math.floor(Math.random() * data.LOVE_QUOTES.length)];
-      toast(`„${q.text}" — ${q.author}`, "ok", 4500);
-    },
-    () => toast("✨ " + data.COMPLIMENTS[Math.floor(Math.random() * data.COMPLIMENTS.length)], "ok", 4000),
-    () => { celebrate(); toast("Подарок: +10 к нежности 💞"); },
-    () => toast("Совет: " + data.DAILY_NOTES[Math.floor(Math.random() * data.DAILY_NOTES.length)], "ok", 4000),
-  ];
-  tasks[Math.floor(Math.random() * tasks.length)]();
-  sound.heart();
-}
+function viewHome() {
+  const root = el("div");
+  const start = new Date(state.startDate || "2024-02-14");
+  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000));
+  const meStats = state.stats[state.profile] || { wins: 0, bestStreak: 0 };
+  const partner = partnerOf(state.profile);
 
-export function go(route, routeData = null) {
-  currentRoute = route;
-  currentRouteData = routeData;
-  refreshShell();
-  const view = document.getElementById("view");
-  clear(view);
-  if (route === "home") renderHome(view);
-  else if (route === "games") renderGames(view);
-  else if (route === "journal") renderJournal(view);
-  else if (route === "stats") renderStats(view);
-  else if (route === "settings") renderSettings(view);
-  else if (route === "game" && routeData) renderGame(view, routeData);
-  else renderHome(view);
-  window.scrollTo(0, 0);
-}
-
-// ─────────────────────  HOME  ─────────────────────
-function renderHome(view) {
-  const s = store.getState();
-  const me = s.customNames?.[s.profile] || s.profile;
-  const other = partner(s.profile);
-  const otherName = s.customNames?.[other] || other;
-
-  const days = daysSince(s.anniversary);
-  const todayIdx = dayOfYear() % data.DAILY_NOTES.length;
-  const noteIdx = dayOfYear() % data.LOVE_QUOTES.length;
+  // pick a daily quote based on day-of-year so it changes every day
+  const today = new Date();
+  const dayIndex = Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - Date.UTC(today.getFullYear(), 0, 0)) / 86400000);
+  const q = DAILY_QUOTES[dayIndex % DAILY_QUOTES.length];
 
   // hero
-  const hero = h("div", { class: "panel panel--hero" }, [
-    h("span", { class: "eyebrow", text: "Private Lounge · только для двоих" }),
-    h("div", { class: "hero-greeting", html: `Привет, <em>${me}</em>.<br>Здесь тебя ждёт ${otherName}.` }),
-    h("div", { id: "homeTypewriter", class: "hero-typewriter" }),
-    h("div", { style: { marginTop: "22px", display: "flex", gap: "10px", flexWrap: "wrap" } }, [
-      h("button", { class: "cta-btn", onClick: () => go("games") }, ["Открыть игры ", h("span", { text: "→" })]),
-      h("button", { class: "cta-btn secondary", onClick: surprise }, ["Сюрприз ✦"]),
-    ]),
-  ]);
-  view.appendChild(hero);
-  setTimeout(() => {
-    const tw = document.getElementById("homeTypewriter");
-    if (tw) typewriter(tw, me + ", " + data.DAILY_NOTES[todayIdx], 40);
-  }, 280);
-
-  // days + mood
-  const row = h("div", { class: "grid grid-aside" }, [
-    h("div", { class: "panel" }, [
-      h("h3", { text: "Мы вместе уже" }),
-      h("div", { class: "days-tile" }, [
-        h("span", { class: "days-num", text: days != null ? days : "—" }),
-        h("div", {}, [
-          h("small", { text: days != null ? "дней счастья" : "Установи дату в настройках" }),
-          h("strong", { text: s.anniversary ? `с ${new Date(s.anniversary).toLocaleDateString("ru", { day: "numeric", month: "long", year: "numeric" })}` : "Любви не назначен дедлайн" }),
-        ]),
-      ]),
-      h("div", { style: { marginTop: "18px" } }, [
-        h("h3", { text: "Как ты сегодня?" }),
-        moodRow(s),
-      ]),
-    ]),
-
-    h("div", { class: "panel" }, [
-      h("h3", { text: "Цитата дня" }),
-      h("div", { class: "quote-box" }, [
-        document.createTextNode(data.LOVE_QUOTES[noteIdx].text),
-        h("span", { class: "quote-author", text: "— " + data.LOVE_QUOTES[noteIdx].author }),
-      ]),
-    ]),
-  ]);
-  view.appendChild(row);
-
-  // recent activity & top games
-  const lastMatches = s.history.slice(0, 6);
-  const wins = countWins(s, s.profile);
-  const losses = countLosses(s, s.profile);
-  const draws = countDraws(s, s.profile);
-
-  const meStats = h("div", { class: "panel" }, [
-    h("h3", { text: "Твоя статистика" }),
-    h("div", { class: "stats-grid" }, [
-      h("div", { class: "stat-card" }, [h("small", { text: "Побед" }), h("h4", { class: "win", text: wins })]),
-      h("div", { class: "stat-card" }, [h("small", { text: "Поражений" }), h("h4", { class: "loss", text: losses })]),
-      h("div", { class: "stat-card" }, [h("small", { text: "Ничьи" }), h("h4", { class: "draw", text: draws })]),
-    ]),
-    h("div", { style: { marginTop: "16px" } }, [
-      h("button", { class: "cta-btn ghost", onClick: () => go("stats") }, ["Все цифры →"]),
-    ]),
-  ]);
-
-  const hist = h("div", { class: "panel" }, [
-    h("h3", { text: "Последние матчи" }),
-    h("div", { class: "history-list" },
-      lastMatches.length === 0
-        ? [h("small", { text: "Пока матчей нет. Запустите первую игру." })]
-        : lastMatches.map(m => renderHistoryRow(m, s.profile))
+  const hero = el("div", { class: "card hero" });
+  hero.append(
+    el("div", { class: "hero-grid" },
+      el("div", {},
+        el("div", { class: "eyebrow" }, el("span", { class: "dot" }), "Private match club"),
+        el("h1", {},
+          state.profile === "Алина" ? "Привет, " : "Привет, ",
+          el("span", { class: "grad" }, state.profile),
+          ".",
+        ),
+        el("p", { class: "hero-text" }, `${partner} ждёт твоего следующего хода. Здесь — ваши игры, ваши воспоминания и ваша личная статистика. Выбирай что угодно — и поехали.`),
+        el("div", { class: "hero-stats" },
+          heroStat(String(days), `${plural(days,"день","дня","дней")} вместе`),
+          heroStat(String(meStats.wins || 0), "побед"),
+          heroStat(String(meStats.bestStreak || 0), "лучшая серия"),
+        ),
+        el("div", { class: "hero-actions" },
+          el("button", { class: "cta-btn", onclick: () => location.hash = "#/games" }, "🎮 Открыть игры"),
+          el("button", { class: "cta-btn secondary", onclick: () => location.hash = "#/games/truth" }, "💌 Правда / Действие"),
+          el("button", { class: "cta-btn ghost", onclick: () => location.hash = "#/diary" }, "📓 Дневник"),
+        ),
+        el("div", { class: "hero-typewriter", id: "heroTypewriter" }),
+      ),
+      el("div", {},
+        el("div", { class: "couple-stage" },
+          el("div", { class: "couple-card left" },
+            el("div", { class: "avatar-big" }, "А"),
+            el("h3", {}, "Алина"),
+            el("p", {}, state.mood["Алина"]?.id ? MOODS.find(m => m.id === state.mood["Алина"].id)?.icon + " " + MOODS.find(m => m.id === state.mood["Алина"].id)?.label : "Никого нет краше"),
+          ),
+          el("div", { class: "couple-center" }, el("div", { class: "big-heart" })),
+          el("div", { class: "couple-card right" },
+            el("div", { class: "avatar-big" }, "А"),
+            el("h3", {}, "Артур"),
+            el("p", {}, state.mood["Артур"]?.id ? MOODS.find(m => m.id === state.mood["Артур"].id)?.icon + " " + MOODS.find(m => m.id === state.mood["Артур"].id)?.label : "Готов к новому матчу"),
+          ),
+        ),
+      ),
     ),
-  ]);
+  );
 
-  view.appendChild(h("div", { class: "grid grid-aside" }, [meStats, hist]));
+  // quote card
+  const quote = el("div", { class: "quote-card" },
+    el("div", { class: "quote-mark" }, "“"),
+    el("blockquote", {}, q.text),
+    el("cite", {}, "— " + q.author),
+  );
 
-  // quick play
-  const quick = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Быстро во что-то поиграть?" }), h("small", { text: "Самые залипательные сейчас" })]),
-      h("button", { class: "cta-btn ghost", onClick: () => go("games") }, ["Все игры"]),
-    ]),
-    h("div", { class: "games-grid" }, ["ttt", "connect4", "wheel", "truth"].map(id => gameCard(data.GAMES.find(g => g.id === id)))),
-  ]);
-  view.appendChild(quick);
+  // mood
+  const mood = el("div", { class: "card" });
+  mood.append(
+    el("div", { class: "card-head" },
+      el("div", {}, el("h2", {}, `Настроение — ${state.profile}`), el("p", {}, "Один тап — и партнёр сразу видит, как ты сегодня.")),
+    ),
+    el("div", { class: "mood-row" },
+      ...MOODS.map(m => el("button", {
+        class: "mood-chip" + (state.mood[state.profile]?.id === m.id ? " active" : ""),
+        onclick: () => { setMood(state, state.profile, m.id); toast(`Настроение: ${m.label}`); route(); }
+      }, el("span", {}, m.icon), m.label)),
+    ),
+  );
+
+  // featured games
+  const featured = el("div", { class: "card" },
+    el("div", { class: "card-head" },
+      el("div", {}, el("h2", {}, "Сыграем?"), el("p", {}, "Любимое — крупно. Все остальные — на странице «Игры».")),
+      el("button", { class: "cta-btn ghost", onclick: () => location.hash = "#/games" }, "Все игры →"),
+    ),
+    el("div", { class: "games-grid" },
+      ...["ttt", "rps", "truth", "love", "wheel", "memory"].map(id => gameTile(id)),
+    ),
+  );
+
+  root.append(hero, quote, mood, featured);
+  setTimeout(() => fillTypewriter("#heroTypewriter", LOVE_LINES), 50);
+  return root;
 }
 
-function moodRow(s) {
-  const myMood = s.mood[s.profile]?.id;
-  const row = h("div", { class: "mood-row" });
-  data.MOOD_OPTIONS.forEach(m => {
-    const btn = h("button", {
-      class: "mood-pill" + (myMood === m.id ? " active" : ""),
-      onClick: () => { store.setMood(s.profile, m.id); sound.pick(); }
-    }, [m.emoji + " " + m.label]);
-    row.appendChild(btn);
+function heroStat(value, label) {
+  return el("div", { class: "hero-stat" },
+    el("strong", {}, value),
+    el("small", {}, label),
+  );
+}
+
+function fillTypewriter(sel, lines) {
+  const node = $(sel); if (!node) return;
+  let i = Math.floor(Math.random() * lines.length);
+  let p = 0, dir = 1, line = lines[i];
+  const tick = () => {
+    if (!document.contains(node)) return;
+    p += dir;
+    node.textContent = line.slice(0, p);
+    if (dir === 1 && p >= line.length) { dir = -1; setTimeout(tick, 1800); return; }
+    if (dir === -1 && p <= 0) { i = (i + 1) % lines.length; line = lines[i]; dir = 1; setTimeout(tick, 280); return; }
+    setTimeout(tick, dir === 1 ? 42 : 22);
+  };
+  tick();
+}
+
+// ── GAMES VIEW ────────────────────────────────────────────────────
+function viewGames() {
+  const root = el("div");
+  const slug = (location.hash.split("/")[2]) || ""; // #/games/<id>
+  const filter = (location.hash.split("/")[3]) || ""; // not used; future
+
+  const hdr = el("div", { class: "section-header" },
+    el("div", {}, el("h2", {}, "Игры"), el("p", {}, `${Object.keys(GAME_CATALOG).length} штук. Выбирай — и сразу играем.`)),
+    el("button", { class: "cta-btn ghost", onclick: () => { location.hash = "#/games"; } }, "↻ Закрыть игру"),
+  );
+  root.append(hdr);
+
+  // filter chips
+  const filterRow = el("div", { class: "filter-row" });
+  const current = sessionStorage.getItem("gameFilter") || "all";
+  for (const [k, v] of Object.entries(GAME_FILTERS)) {
+    filterRow.append(el("button", {
+      class: "filter-chip" + (current === k ? " active" : ""),
+      onclick: () => { sessionStorage.setItem("gameFilter", k); route(); },
+    }, v));
+  }
+  root.append(filterRow);
+
+  // grid
+  const grid = el("div", { class: "games-grid" });
+  Object.entries(GAME_CATALOG).forEach(([id, g]) => {
+    if (current !== "all" && g.tag !== current) return;
+    grid.append(gameTile(id));
   });
-  return row;
+  root.append(grid);
+
+  // game host
+  if (slug && GAME_CATALOG[slug]) {
+    const wrap = el("div", { class: "game-host-wrap" });
+    const head = el("div", { class: "card-head" },
+      el("div", {}, el("h2", {}, GAME_CATALOG[slug].title), el("p", {}, GAME_CATALOG[slug].sub)),
+      el("button", { class: "cta-btn secondary", onclick: () => { cleanupGame(); location.hash = "#/games"; } }, "← Закрыть"),
+    );
+    const scoreboard = el("div", { class: "scoreboard" });
+    const host = el("div", { class: "game-host" });
+    const card = el("div", { class: "card" });
+    card.append(head, scoreboard, host);
+    wrap.append(card);
+    root.append(wrap);
+    setTimeout(() => mountGameWithCtx(slug, host, scoreboard), 0);
+    setTimeout(() => card.scrollIntoView({ behavior: "smooth", block: "start" }), 200);
+  }
+  return root;
 }
 
-// ─────────────────────  GAMES LIST  ─────────────────────
-function renderGames(view) {
-  const groups = [
-    { id: "duo", title: "Вдвоём", sub: "Hot-seat: передавайте телефон или играйте за одним столом" },
-    { id: "couple", title: "Романтика и фан", sub: "Лёгкие развлечения, гадания и подкол" },
-    { id: "solo", title: "Соло с рейтингом", sub: "Лучший счёт сохраняется за профилем" },
-  ];
-  groups.forEach(g => {
-    const games = data.GAMES.filter(x => x.category === g.id);
-    view.appendChild(h("div", { class: "section-heading" }, [
-      h("h2", { text: g.title }),
-      h("small", { text: g.sub }),
-    ]));
-    view.appendChild(h("div", { class: "games-grid" }, games.map(gameCard)));
-  });
+function gameTile(id) {
+  const g = GAME_CATALOG[id];
+  return el("button", {
+    class: "game-tile",
+    style: g.grad ? `--tile-grad:${g.grad}` : "",
+    onclick: () => { location.hash = `#/games/${id}`; },
+  },
+    el("span", { class: "tile-icon" }, g.icon),
+    el("span", { class: "tile-title" }, g.title),
+    el("span", { class: "tile-sub" }, g.sub),
+    el("span", { class: "tile-foot" },
+      el("span", { class: `tile-tag ${g.tag}` }, g.tag === "duo" ? "Вдвоём" : g.tag === "solo" ? "Соло" : "Для пары"),
+    ),
+  );
 }
 
-function gameCard(g) {
-  return h("button", { class: "game-card", onClick: () => openGame(g.id) }, [
-    h("div", { class: "game-card-bg " + g.color }),
-    h("div", { class: "game-card-inner" }, [
-      h("span", { class: "game-card-emoji", text: g.emoji }),
-      h("div", {}, [
-        h("h3", { text: g.title }),
-        h("p", { text: g.subtitle }),
-        h("span", { class: "tag", text: g.category === "duo" ? "Вдвоём" : g.category === "solo" ? "Соло" : "Романтика" }),
-      ]),
-    ]),
-  ]);
+function cleanupGame() {
+  if (window.__gameCleanup) { try { window.__gameCleanup(); } catch (e) {} window.__gameCleanup = null; }
 }
 
-function openGame(id) {
-  if (!GAME_MOUNTERS[id]) { toast("Игра скоро будет ✨"); return; }
-  go("game", { id });
-}
-
-function renderGame(view, { id }) {
-  const meta = data.GAMES.find(g => g.id === id);
-  if (!meta) { renderGames(view); return; }
-  const wrap = h("div", { class: "game-view" });
-
-  const hud = h("div", { class: "game-hud" }, [
-    h("div", { class: "game-hud-l" }, [
-      h("button", { class: "cta-btn ghost", onClick: () => go("games") }, ["← Назад"]),
-      h("h2", { text: meta.title }),
-    ]),
-    h("div", { class: "scoreboard", id: "scoreboard" }),
-  ]);
-  wrap.appendChild(hud);
-
-  const container = h("div", { id: "gameBody" });
-  wrap.appendChild(container);
-  view.appendChild(wrap);
-
+function mountGameWithCtx(id, host, scoreboardEl) {
   const ctx = {
-    me: store.getState().profile,
-    other: partner(store.getState().profile),
-    customNames: store.getState().customNames,
-    sound,
+    profile: state.profile,
+    partner: partnerOf(state.profile),
+    state,
+    scoreboardEl,
+    recordResult: (gameId, winner, loser, isDraw = false) => recordMatch(state, gameId, winner, loser, isDraw),
+    recordHighScore: (profile, gameId, value, isLowerBetter = false) => storageRecordHigh(state, profile, gameId, value, isLowerBetter),
+    addQuizScore: (profile, score, total) => storageAddQuiz(state, profile, score, total),
     toast,
-    celebrate,
-    store,
-    h, clear,
-    score: document.getElementById("scoreboard"),
-    onResult: ({ winner, loser, draw }) => {
-      if (draw) {
-        store.recordResult(id, winner, loser, true);
-        sound.draw();
-      } else if (winner && loser) {
-        store.recordResult(id, winner, loser, false);
-        if (winner === ctx.me) celebrate();
-      }
-    },
+    confettiBurst,
+    registerCleanup: (fn) => { window.__gameCleanup = fn; },
   };
-
-  GAME_MOUNTERS[id](container, ctx);
+  mountGame(id, host, ctx);
 }
 
-// ─────────────────────  JOURNAL  ─────────────────────
-function renderJournal(view) {
-  const s = store.getState();
-  const me = s.profile;
+// ── DIARY VIEW ────────────────────────────────────────────────────
+function viewDiary() {
+  const root = el("div");
+  root.append(el("div", { class: "section-header" },
+    el("div", {}, el("h2", {}, "Дневник"), el("p", {}, "Личные записи и общий список желаний.")),
+  ));
 
-  // Notes
-  const noteInput = h("input", { type: "text", placeholder: "Записать что-то милое или серьёзное…", maxlength: 240 });
-  const addNote = () => {
-    const txt = noteInput.value.trim();
-    if (!txt) return;
-    store.addNote(me, txt);
-    noteInput.value = "";
-    sound.pick();
-  };
-  noteInput.addEventListener("keydown", e => { if (e.key === "Enter") addNote(); });
-  const notesPanel = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Дневник" }), h("small", { text: "Заметки сохраняются на этом устройстве" })]),
-    ]),
-    h("div", { class: "journal-input" }, [
-      noteInput,
-      h("button", { class: "cta-btn", onClick: addNote }, ["Добавить"]),
-    ]),
-    h("div", { class: "journal-list", style: { marginTop: "14px" } },
-      s.notes.length === 0
-        ? [h("small", { text: "Пока пусто. Запиши первую мысль." })]
-        : s.notes.map(n =>
-            h("div", { class: "journal-item" }, [
-              h("button", { class: "x", onClick: () => { store.removeNote(n.id); } }, ["×"]),
-              h("small", { text: `${n.author} · ${fmtDate(n.ts)}` }),
-              h("div", { style: { marginTop: "6px" }, text: n.text }),
-            ])
-          )
-    ),
-  ]);
+  const grid = el("div", { class: "diary-grid" });
 
-  // Wishlist
-  const wishInput = h("input", { type: "text", placeholder: "Хотим сделать вместе…" });
-  const addWish = () => {
-    const txt = wishInput.value.trim();
-    if (!txt) return;
-    store.addWish(me, txt);
-    wishInput.value = "";
-    sound.pick();
-  };
-  wishInput.addEventListener("keydown", e => { if (e.key === "Enter") addWish(); });
-  const wishPanel = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Список желаний" }), h("small", { text: "Места, дела, мечты, фильмы" })]),
-    ]),
-    h("div", { class: "journal-input" }, [
-      wishInput,
-      h("button", { class: "cta-btn", onClick: addWish }, ["Добавить"]),
-    ]),
-    h("div", { class: "journal-list", style: { marginTop: "14px" } },
-      s.wishlist.length === 0
-        ? [h("small", { text: "Пока пусто. Запиши первое желание." })]
-        : s.wishlist.map(w =>
-            h("div", { class: "journal-item", style: { opacity: w.done ? .55 : 1 } }, [
-              h("button", { class: "x", onClick: () => store.removeWish(w.id) }, ["×"]),
-              h("small", { text: `${w.author} · ${fmtDate(w.ts)}` }),
-              h("div", { style: { marginTop: "6px", textDecoration: w.done ? "line-through" : "none" }, text: w.text }),
-              h("button", { class: "cta-btn ghost", style: { marginTop: "10px", padding: "6px 12px", fontSize: "12px" }, onClick: () => store.toggleWish(w.id) }, [w.done ? "Не сделано" : "Сделано ✓"]),
-            ])
-          )
-    ),
-  ]);
-
-  view.appendChild(h("div", { class: "grid grid-aside" }, [notesPanel, wishPanel]));
-}
-
-// ─────────────────────  STATS  ─────────────────────
-function renderStats(view) {
-  const s = store.getState();
-  const both = ["Алина", "Артур"];
-
-  // overall summary
-  const summary = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Личный счёт" }), h("small", { text: "Битва двух титанов" })]),
-    ]),
-    h("div", { class: "grid grid-2" }, both.map(p => {
-      const w = countWins(s, p), l = countLosses(s, p), d = countDraws(s, p);
-      const name = s.customNames?.[p] || p;
-      return h("div", { class: "stat-card" }, [
-        h("small", { text: "Профиль" }),
-        h("h4", { text: name }),
-        h("div", { class: "stat-row" }, [h("span", { text: "Побед" }), h("strong", { class: "win", text: w })]),
-        h("div", { class: "stat-row" }, [h("span", { text: "Поражений" }), h("strong", { class: "loss", text: l })]),
-        h("div", { class: "stat-row" }, [h("span", { text: "Ничьи" }), h("strong", { class: "draw", text: d })]),
-      ]);
-    })),
-  ]);
-  view.appendChild(summary);
-
-  // by game
-  const cards = h("div", { class: "stats-grid" });
-  data.GAMES.forEach(g => {
-    const a = s.stats["Алина"]?.[g.id] || { w: 0, l: 0, d: 0 };
-    const b = s.stats["Артур"]?.[g.id] || { w: 0, l: 0, d: 0 };
-    const hsa = s.highScores["Алина"]?.[g.id];
-    const hsb = s.highScores["Артур"]?.[g.id];
-    if (g.category === "couple" && !a.w && !a.l && !a.d && !b.w && !b.l && !b.d) return;
-    cards.appendChild(h("div", { class: "stat-card" }, [
-      h("small", { text: g.subtitle }),
-      h("h4", { text: g.title }),
-      g.category === "solo"
-        ? h("div", {}, [
-            h("div", { class: "stat-row" }, [h("span", { text: "Алина · рекорд" }), h("strong", { class: "win", text: hsa != null ? hsa : "—" })]),
-            h("div", { class: "stat-row" }, [h("span", { text: "Артур · рекорд" }), h("strong", { class: "win", text: hsb != null ? hsb : "—" })]),
-          ])
-        : h("div", {}, [
-            h("div", { class: "stat-row" }, [h("span", { text: "Алина" }), h("strong", { html: `<span class="win">${a.w}</span> / <span class="loss">${a.l}</span> / <span class="draw">${a.d}</span>` })]),
-            h("div", { class: "stat-row" }, [h("span", { text: "Артур" }), h("strong", { html: `<span class="win">${b.w}</span> / <span class="loss">${b.l}</span> / <span class="draw">${b.d}</span>` })]),
-          ]),
-    ]));
+  // notes
+  const notes = el("div", { class: "card" });
+  const textarea = el("textarea", { placeholder: "Что чувствуешь? О чём думаешь? Что хочешь сказать партнёру..." });
+  const addBtn = el("button", { class: "cta-btn", onclick: () => {
+    const t = textarea.value.trim(); if (!t) return;
+    addDiary(state, state.profile, t);
+    textarea.value = "";
+    route();
+    toast("Запись сохранена");
+  } }, "Добавить запись");
+  const list = el("div", {});
+  (state.diary[state.profile] || []).forEach(entry => {
+    list.append(el("div", { class: "diary-entry" },
+      el("header", {},
+        el("span", {}, new Date(entry.ts).toLocaleString("ru-RU")),
+        el("button", { onclick: () => { removeDiary(state, state.profile, entry.ts); route(); } }, "Удалить"),
+      ),
+      el("p", {}, entry.text),
+    ));
   });
-  view.appendChild(h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "По играм" }), h("small", { text: "Победы / поражения / ничьи" })]),
-    ]),
-    cards,
-  ]));
+  if (!(state.diary[state.profile] || []).length) {
+    list.append(el("p", { class: "muted" }, "Записей пока нет. Напиши что-нибудь — даже одно слово."));
+  }
+  notes.append(
+    el("div", { class: "card-head" }, el("div", {}, el("h2", {}, `${state.profile}: записи`), el("p", {}, "Только ты их видишь на этом устройстве."))),
+    el("div", { class: "diary-form" }, textarea, addBtn),
+    el("hr", { style: "border:0;border-top:1px solid var(--line);margin:18px 0" }),
+    list,
+  );
+
+  // wishes
+  const wishes = el("div", { class: "card" });
+  const newWish = el("input", { type: "text", class: "text-input", placeholder: "Хочу вместе с тобой..." });
+  const wishBtn = el("button", { class: "cta-btn", onclick: () => {
+    const t = newWish.value.trim(); if (!t) return;
+    addWish(state, t, state.profile); newWish.value = ""; route();
+  } }, "Добавить желание");
+  const wishList = el("div", {});
+  state.wishes.forEach(w => {
+    const row = el("div", { class: "wish-row" + (w.done ? " done" : "") },
+      el("input", { type: "checkbox", checked: w.done, onchange: () => { toggleWish(state, w.id); route(); } }),
+      el("span", { class: "wish-text" }, w.text),
+      el("span", { class: "wish-by" }, "— " + w.by),
+      el("button", { onclick: () => { removeWish(state, w.id); route(); }, style: "background:transparent;color:var(--text-3);font-size:18px" }, "×"),
+    );
+    wishList.append(row);
+  });
+  if (!state.wishes.length) {
+    wishList.append(el("p", { class: "muted" }, "Пока пусто. Добавь идеи — мы потом по ним пройдёмся вместе."));
+  }
+  const suggest = el("div", { style: "margin-top:16px" },
+    el("p", { class: "muted", style: "margin-bottom:8px" }, "Несколько идей, можно тапнуть:"),
+    el("div", { class: "filter-row" },
+      ...WISHES.slice(0, 6).map(w => el("button", { class: "filter-chip", onclick: () => { addWish(state, w, state.profile); route(); } }, w)),
+    ),
+  );
+
+  wishes.append(
+    el("div", { class: "card-head" }, el("div", {}, el("h2", {}, "Наши желания"), el("p", {}, "Общий список — видят оба."))),
+    el("div", { style: "display:flex;gap:10px;margin-bottom:14px" }, newWish, wishBtn),
+    wishList, suggest,
+  );
+
+  grid.append(notes, wishes);
+  root.append(grid);
+  return root;
+}
+
+// ── STATS VIEW ────────────────────────────────────────────────────
+function viewStats() {
+  const root = el("div");
+  root.append(el("div", { class: "section-header" },
+    el("div", {}, el("h2", {}, "Статистика"), el("p", {}, "Победы, поражения, рекорды и история матчей.")),
+  ));
+
+  const sCards = el("div", { class: "stats-grid" });
+  PROFILES.forEach(p => {
+    const s = state.stats[p] || { wins: 0, losses: 0, draws: 0, bestStreak: 0, byGame: {} };
+    const hs = state.highScores[p] || {};
+    const box = el("div", { class: "stat-box" },
+      el("h3", {}, el("span", { class: "badge-avatar", style: `background:${p === "Алина" ? "var(--alina-grad)" : "var(--artur-grad)"}` }, "А"), p),
+      el("div", { class: "stat-row" }, el("span", {}, "Победы"), el("strong", { style: "color:var(--win)" }, String(s.wins))),
+      el("div", { class: "stat-row" }, el("span", {}, "Поражения"), el("strong", { style: "color:var(--loss)" }, String(s.losses))),
+      el("div", { class: "stat-row" }, el("span", {}, "Ничьи"), el("strong", { style: "color:var(--draw)" }, String(s.draws))),
+      el("div", { class: "stat-row" }, el("span", {}, "Лучшая серия побед"), el("strong", {}, String(s.bestStreak))),
+      el("div", { class: "stat-row" }, el("span", {}, "Текущая серия"), el("strong", {}, String(s.streakWin || 0))),
+      hs.snake     != null ? el("div", { class: "stat-row" }, el("span", {}, "🐍 Snake — рекорд"), el("strong", {}, String(hs.snake))) : null,
+      hs.g2048     != null ? el("div", { class: "stat-row" }, el("span", {}, "🧮 2048 — рекорд"), el("strong", {}, String(hs.g2048))) : null,
+      hs.reaction  != null ? el("div", { class: "stat-row" }, el("span", {}, "⚡ Реакция — лучшее"), el("strong", {}, hs.reaction + " мс")) : null,
+      hs.simon     != null ? el("div", { class: "stat-row" }, el("span", {}, "🎵 Simon — рекорд"), el("strong", {}, String(hs.simon))) : null,
+      hs.whack     != null ? el("div", { class: "stat-row" }, el("span", {}, "🐹 Whack — рекорд"), el("strong", {}, String(hs.whack))) : null,
+      hs.slide     != null ? el("div", { class: "stat-row" }, el("span", {}, "🔢 15-puzzle — лучшее (ходы)"), el("strong", {}, String(hs.slide))) : null,
+    );
+    sCards.append(box);
+  });
+  root.append(sCards);
 
   // history
-  const hist = s.history;
-  view.appendChild(h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Журнал матчей" }), h("small", { text: "Последние партии" })]),
-    ]),
-    h("div", { class: "history-list" },
-      hist.length === 0
-        ? [h("small", { text: "Пока никто никого не побеждал. Старт?" })]
-        : hist.map(m => renderHistoryRow(m, s.profile))
-    ),
-  ]));
+  const hist = el("div", { class: "card" });
+  hist.append(el("div", { class: "card-head" },
+    el("div", {}, el("h2", {}, "История матчей"), el("p", {}, "Последние 50 партий.")),
+  ));
+  const list = el("div", { class: "history-list" });
+  const arr = (state.history || []).slice(0, 50);
+  if (!arr.length) list.append(el("p", { class: "muted" }, "Пока нет ни одной партии — самое время начать."));
+  arr.forEach(h => {
+    const game = GAME_CATALOG[h.game]?.title || h.game;
+    if (h.draw) {
+      list.append(el("div", { class: "history-item" },
+        el("div", {},
+          el("strong", {}, `${h.winner} ${h.loser ? "и " + h.loser : ""}`),
+          el("div", { class: "meta" }, `${game} · ${new Date(h.ts).toLocaleString("ru-RU")}`),
+        ),
+        el("span", { class: "history-badge draw" }, "Ничья"),
+      ));
+    } else {
+      list.append(el("div", { class: "history-item" },
+        el("div", {},
+          el("strong", {}, `${h.winner} победил${h.winner === "Алина" ? "а" : ""}`),
+          el("div", { class: "meta" }, `${game} · vs ${h.loser} · ${new Date(h.ts).toLocaleString("ru-RU")}`),
+        ),
+        el("span", { class: "history-badge win" }, "Победа"),
+      ));
+    }
+  });
+  hist.append(list);
+  root.append(hist);
+  return root;
 }
 
-function renderHistoryRow(m, viewer) {
-  let res = "draw", label = "ничья";
-  if (m.result === "win") {
-    if (m.a === viewer) { res = "win"; label = "победа"; }
-    else if (m.b === viewer) { res = "loss"; label = "поражение"; }
-    else { res = "win"; label = m.a + " выиграл"; }
-  }
-  const name = data.GAME_LABELS[m.game] || m.game;
-  return h("div", { class: "history-row" }, [
-    h("span", { class: "history-result " + res, text: label }),
-    h("div", {}, [
-      h("strong", { text: name }),
-      h("div", {}, [h("small", { text: m.a + " vs " + m.b })]),
-    ]),
-    h("span", { class: "history-meta", text: fmtDate(m.ts) }),
-  ]);
-}
-
-// ─────────────────────  SETTINGS  ─────────────────────
-function renderSettings(view) {
-  const s = store.getState();
-
-  // profile switch
-  const profileBlock = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Профиль" }), h("small", { text: "Кто сейчас за устройством" })]),
-    ]),
-    h("div", { class: "grid grid-2" }, [
-      h("button", {
-        class: "cta-btn " + (s.profile === "Алина" ? "" : "secondary"),
-        onClick: () => { store.setProfile("Алина"); refreshShell(); }
-      }, ["Алина"]),
-      h("button", {
-        class: "cta-btn " + (s.profile === "Артур" ? "" : "secondary"),
-        onClick: () => { store.setProfile("Артур"); refreshShell(); }
-      }, ["Артур"]),
-    ]),
-    h("div", { style: { marginTop: "16px" } }, [
-      h("button", { class: "cta-btn ghost", onClick: () => {
-        store.clearProfile();
-        showLogin();
-      } }, ["Выйти из профиля"]),
-    ]),
-  ]);
-
-  // theme
-  const themeBlock = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Тема" }), h("small", { text: "Цвета меняются мгновенно" })]),
-    ]),
-    h("div", { class: "grid grid-3" }, [
-      themeCard("aurora", "Аврора", "Глубокая фиалка и закат", s),
-      themeCard("dawn", "Рассвет", "Светлая, тёплая, нежная", s),
-      themeCard("noir", "Полночь", "Контраст, чёрный кофе", s),
-    ]),
-  ]);
-
-  // names
-  const nameAlina = h("input", { type: "text", value: s.customNames["Алина"] || "Алина", maxlength: 32 });
-  const nameArtur = h("input", { type: "text", value: s.customNames["Артур"] || "Артур", maxlength: 32 });
-  const namesBlock = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Как вас называть" }), h("small", { text: "Поменяй на ласковые прозвища" })]),
-    ]),
-    h("div", { class: "grid grid-2" }, [
-      h("div", { class: "field" }, [h("label", { text: "Профиль Алины" }), nameAlina]),
-      h("div", { class: "field" }, [h("label", { text: "Профиль Артура" }), nameArtur]),
-    ]),
-    h("button", { class: "cta-btn", style: { marginTop: "16px" }, onClick: () => {
-      store.setCustomName("Алина", nameAlina.value.trim() || "Алина");
-      store.setCustomName("Артур", nameArtur.value.trim() || "Артур");
-      toast("Имена сохранены ✓");
-      refreshShell();
-    } }, ["Сохранить имена"]),
-  ]);
-
-  // anniversary
-  const annInput = h("input", { type: "date", value: s.anniversary ? s.anniversary.slice(0, 10) : "" });
-  const annBlock = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Дата начала отношений" }), h("small", { text: "Счётчик дней появится на главной" })]),
-    ]),
-    h("div", { class: "field" }, [
-      h("label", { text: "Когда всё началось" }),
-      annInput,
-    ]),
-    h("button", { class: "cta-btn", style: { marginTop: "16px" }, onClick: () => {
-      if (!annInput.value) return;
-      store.setAnniversary(new Date(annInput.value).toISOString());
-      toast("Дата сохранена ✓");
-    } }, ["Сохранить"]),
-  ]);
-
-  // danger zone
-  const dangerBlock = h("div", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("div", {}, [h("h3", { text: "Опасная зона" }), h("small", { text: "Сбросит весь прогресс на этом устройстве" })]),
-    ]),
-    h("button", { class: "cta-btn ghost", onClick: () => {
-      if (confirm("Точно сбросить ВСЁ? Статистика, дневник, имена, темы — всё пропадёт.")) {
-        store.resetAll();
-        showLogin();
-      }
-    } }, ["Сбросить всё"]),
-  ]);
-
-  view.appendChild(h("div", { class: "grid grid-aside" }, [profileBlock, themeBlock]));
-  view.appendChild(h("div", { class: "grid grid-aside" }, [namesBlock, annBlock]));
-  view.appendChild(dangerBlock);
-}
-
-function themeCard(id, title, sub, s) {
-  const card = h("button", {
-    class: "stat-card" + (s.theme === id ? " active" : ""),
-    onClick: () => { store.setTheme(id); toast("Тема: " + title); },
-    style: { textAlign: "left", cursor: "pointer", border: s.theme === id ? "1px solid var(--rose)" : undefined }
-  }, [
-    h("small", { text: "Тема" }),
-    h("h4", { text: title }),
-    h("small", { text: sub }),
-  ]);
-  return card;
-}
-
-// ─────────────────────  HELPERS  ─────────────────────
-function daysSince(iso) {
-  if (!iso) return null;
-  const start = new Date(iso);
-  const now = new Date();
-  const ms = now - start;
-  if (ms < 0) return 0;
-  return Math.floor(ms / 86400000);
-}
-function dayOfYear() {
-  const d = new Date();
-  const start = new Date(d.getFullYear(), 0, 0);
-  return Math.floor((d - start) / 86400000);
-}
-function countWins(s, p) { return Object.values(s.stats?.[p] || {}).reduce((a, x) => a + (x.w || 0), 0); }
-function countLosses(s, p) { return Object.values(s.stats?.[p] || {}).reduce((a, x) => a + (x.l || 0), 0); }
-function countDraws(s, p) { return Object.values(s.stats?.[p] || {}).reduce((a, x) => a + (x.d || 0), 0); }
-
-// expose for game modules (back navigation)
-window.__go = go;
-
-init();
+// ───── BOOT ────────────────────────────────────────────────────────
+initConfetti();
+boot();

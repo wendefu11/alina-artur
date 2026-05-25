@@ -1,136 +1,191 @@
-// LocalStorage layer with safe fallbacks
-const KEY = "aa_state_v1";
+// ─────────────────────────  STORAGE  ─────────────────────────
+// LocalStorage wrapper. Single key. Versioned schema.
+// Everything is per-profile where it makes sense (stats, diary, mood, wishes).
 
-const DEFAULT = {
-  profile: null,              // "Алина" | "Артур"
-  theme: "aurora",            // aurora | dawn | noir
-  muted: false,
-  anniversary: null,          // ISO date string
-  customNames: { "Алина": "Алина", "Артур": "Артур" },
-  mood: {},                   // { "Алина": {id, ts}, "Артур": {...} }
-  notes: [],                  // [{id, ts, author, text}]
-  wishlist: [],               // [{id, ts, author, text, done}]
-  highScores: {               // per-profile high scores
-    "Алина": { snake: 0, g2048: 0, reaction: 9999 },
-    "Артур": { snake: 0, g2048: 0, reaction: 9999 },
+const KEY = "alina-artur-v3";
+
+const DEFAULT_STATE = {
+  version: 3,
+  profile: "",          // "Алина" | "Артур" | ""
+  theme: "aurora",      // "aurora" | "dawn" | "noir"
+  startDate: "2024-02-14", // дата начала отношений; пользователь может поменять
+  hero: {
+    photo: "",          // dataURL опционально
+    songLink: "",
   },
-  stats: {                    // per-profile per-game w/l/d
+  stats: {
+    "Алина": emptyStats(),
+    "Артур": emptyStats(),
+  },
+  history: [],          // [{ts, game, winner, loser, draw}]
+  highScores: {
     "Алина": {},
     "Артур": {},
   },
-  history: [],                // last 60 results
-  quizScores: [],             // history of couple quizzes
+  quiz: {
+    "Алина": [],        // [{ts, score, total}]
+    "Артур": [],
+  },
+  diary: {
+    "Алина": [],        // [{ts, text, mood, emoji}]
+    "Артур": [],
+  },
+  wishes: [],           // shared. [{id, text, done, by}]
+  mood: {
+    "Алина": null,      // {id, ts}
+    "Артур": null,
+  },
 };
 
-function deepMerge(target, source) {
-  for (const key of Object.keys(source)) {
-    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
-      if (!target[key] || typeof target[key] !== "object") target[key] = {};
-      deepMerge(target[key], source[key]);
-    } else if (!(key in target)) {
-      target[key] = source[key];
+function emptyStats() {
+  return {
+    wins: 0, losses: 0, draws: 0,
+    streakWin: 0, bestStreak: 0,
+    byGame: {},
+  };
+}
+
+function safeParse(s) {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+export function load() {
+  const raw = localStorage.getItem(KEY);
+  const parsed = raw ? safeParse(raw) : null;
+  if (!parsed || parsed.version !== DEFAULT_STATE.version) {
+    save(DEFAULT_STATE);
+    return structuredClone(DEFAULT_STATE);
+  }
+  // Soft-merge: make sure newly added keys are present.
+  const merged = { ...structuredClone(DEFAULT_STATE), ...parsed };
+  for (const k of ["stats", "highScores", "quiz", "diary", "mood"]) {
+    merged[k] = { ...DEFAULT_STATE[k], ...(parsed[k] || {}) };
+    for (const who of ["Алина", "Артур"]) {
+      if (k === "stats") {
+        merged[k][who] = { ...emptyStats(), ...(merged[k][who] || {}) };
+        merged[k][who].byGame = { ...(merged[k][who].byGame || {}) };
+      } else if (k === "highScores") {
+        merged[k][who] = merged[k][who] || {};
+      } else if (k === "quiz" || k === "diary") {
+        merged[k][who] = Array.isArray(merged[k][who]) ? merged[k][who] : [];
+      } else if (k === "mood") {
+        merged[k][who] = merged[k][who] || null;
+      }
     }
   }
-  return target;
+  merged.history = Array.isArray(merged.history) ? merged.history : [];
+  merged.wishes  = Array.isArray(merged.wishes)  ? merged.wishes  : [];
+  merged.hero    = { ...DEFAULT_STATE.hero, ...(merged.hero || {}) };
+  return merged;
 }
 
-let state = (() => {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return structuredClone(DEFAULT);
-    const parsed = JSON.parse(raw);
-    return deepMerge(parsed, structuredClone(DEFAULT));
-  } catch (e) {
-    return structuredClone(DEFAULT);
+export function save(state) {
+  localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+// ── mutation helpers ────────────────────────────────────────
+
+export function recordMatch(state, gameId, winner, loser, isDraw = false) {
+  const ts = Date.now();
+  state.history.unshift({ ts, game: gameId, winner, loser, draw: !!isDraw });
+  if (state.history.length > 200) state.history.length = 200;
+
+  if (isDraw) {
+    [winner, loser].forEach(p => {
+      if (!state.stats[p]) state.stats[p] = emptyStats();
+      state.stats[p].draws += 1;
+      state.stats[p].streakWin = 0;
+      const g = state.stats[p].byGame[gameId] || { wins: 0, losses: 0, draws: 0 };
+      g.draws += 1;
+      state.stats[p].byGame[gameId] = g;
+    });
+  } else {
+    if (!state.stats[winner]) state.stats[winner] = emptyStats();
+    if (!state.stats[loser])  state.stats[loser]  = emptyStats();
+    state.stats[winner].wins += 1;
+    state.stats[loser].losses += 1;
+    state.stats[winner].streakWin += 1;
+    state.stats[winner].bestStreak = Math.max(state.stats[winner].bestStreak, state.stats[winner].streakWin);
+    state.stats[loser].streakWin = 0;
+    const gw = state.stats[winner].byGame[gameId] || { wins: 0, losses: 0, draws: 0 };
+    gw.wins += 1;
+    state.stats[winner].byGame[gameId] = gw;
+    const gl = state.stats[loser].byGame[gameId] || { wins: 0, losses: 0, draws: 0 };
+    gl.losses += 1;
+    state.stats[loser].byGame[gameId] = gl;
   }
-})();
-
-const listeners = new Set();
-
-export function getState() { return state; }
-export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-
-function notify() {
-  for (const fn of listeners) fn(state);
+  save(state);
 }
 
-export function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
-  notify();
-}
-
-export function setProfile(name) { state.profile = name; save(); }
-export function clearProfile() { state.profile = null; save(); }
-export function setTheme(t) { state.theme = t; save(); }
-export function setMuted(m) { state.muted = !!m; save(); }
-export function setAnniversary(iso) { state.anniversary = iso; save(); }
-export function setCustomName(profile, name) { state.customNames[profile] = name; save(); }
-
-export function setMood(profile, mood) {
-  state.mood[profile] = { id: mood, ts: Date.now() };
-  save();
-}
-
-export function addNote(profile, text) {
-  state.notes.unshift({ id: crypto.randomUUID(), ts: Date.now(), author: profile, text });
-  state.notes = state.notes.slice(0, 100);
-  save();
-}
-export function removeNote(id) { state.notes = state.notes.filter(n => n.id !== id); save(); }
-
-export function addWish(profile, text) {
-  state.wishlist.unshift({ id: crypto.randomUUID(), ts: Date.now(), author: profile, text, done: false });
-  state.wishlist = state.wishlist.slice(0, 60);
-  save();
-}
-export function toggleWish(id) {
-  const w = state.wishlist.find(x => x.id === id);
-  if (w) w.done = !w.done;
-  save();
-}
-export function removeWish(id) { state.wishlist = state.wishlist.filter(n => n.id !== id); save(); }
-
-export function recordHighScore(profile, game, score, lowerIsBetter = false) {
+export function recordHighScore(state, profile, gameId, value, isLowerBetter = false) {
   if (!state.highScores[profile]) state.highScores[profile] = {};
-  const prev = state.highScores[profile][game] ?? (lowerIsBetter ? Infinity : 0);
+  const prev = state.highScores[profile][gameId];
   let improved = false;
-  if (lowerIsBetter ? score < prev : score > prev) {
-    state.highScores[profile][game] = score;
-    improved = true;
+  if (prev == null) improved = true;
+  else if (isLowerBetter) improved = value < prev;
+  else improved = value > prev;
+  if (improved) {
+    state.highScores[profile][gameId] = value;
+    save(state);
   }
-  save();
   return improved;
 }
 
-export function recordResult(game, winner, loser, draw = false) {
-  const ts = Date.now();
-  const ensure = (p) => {
-    if (!state.stats[p]) state.stats[p] = {};
-    if (!state.stats[p][game]) state.stats[p][game] = { w: 0, l: 0, d: 0 };
-  };
-  if (draw) {
-    ensure(winner); ensure(loser);
-    state.stats[winner][game].d += 1;
-    state.stats[loser][game].d += 1;
-    state.history.unshift({ ts, game, result: "draw", a: winner, b: loser });
-  } else if (winner && loser) {
-    ensure(winner); ensure(loser);
-    state.stats[winner][game].w += 1;
-    state.stats[loser][game].l += 1;
-    state.history.unshift({ ts, game, result: "win", a: winner, b: loser });
-  }
-  state.history = state.history.slice(0, 60);
-  save();
+export function addQuizScore(state, profile, score, total) {
+  if (!state.quiz[profile]) state.quiz[profile] = [];
+  state.quiz[profile].unshift({ ts: Date.now(), score, total });
+  if (state.quiz[profile].length > 50) state.quiz[profile].length = 50;
+  save(state);
 }
 
-export function addQuizScore(profile, score, total) {
-  state.quizScores.unshift({ ts: Date.now(), profile, score, total });
-  state.quizScores = state.quizScores.slice(0, 20);
-  save();
+export function addDiary(state, profile, text, mood = "") {
+  if (!state.diary[profile]) state.diary[profile] = [];
+  state.diary[profile].unshift({ ts: Date.now(), text, mood });
+  save(state);
+}
+
+export function removeDiary(state, profile, ts) {
+  state.diary[profile] = (state.diary[profile] || []).filter(d => d.ts !== ts);
+  save(state);
+}
+
+export function setMood(state, profile, moodId) {
+  state.mood[profile] = { id: moodId, ts: Date.now() };
+  save(state);
+}
+
+export function addWish(state, text, by) {
+  state.wishes.unshift({ id: cryptoId(), text, done: false, by, ts: Date.now() });
+  save(state);
+}
+
+export function toggleWish(state, id) {
+  const w = state.wishes.find(w => w.id === id);
+  if (w) { w.done = !w.done; save(state); }
+}
+
+export function removeWish(state, id) {
+  state.wishes = state.wishes.filter(w => w.id !== id);
+  save(state);
+}
+
+function cryptoId() {
+  if (window.crypto?.randomUUID) return crypto.randomUUID();
+  return "w_" + Math.random().toString(36).slice(2, 10);
+}
+
+export function exportJSON(state) {
+  return JSON.stringify(state, null, 2);
+}
+
+export function importJSON(text) {
+  const obj = safeParse(text);
+  if (!obj || typeof obj !== "object") return false;
+  obj.version = DEFAULT_STATE.version;
+  save(obj);
+  return true;
 }
 
 export function resetAll() {
   localStorage.removeItem(KEY);
-  state = structuredClone(DEFAULT);
-  notify();
 }
