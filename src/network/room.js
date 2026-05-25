@@ -1,30 +1,16 @@
 // ─────────────────────────  NETWORK / ROOM  ─────────────────────────
-// State machine for online play. Two roles: HOST (creates room, peerId = roomCode)
-// and GUEST (connects to existing room). One DataConnection per room.
-//
-// Public API (Room instance):
-//   await room.hostRoom(opts)            → { code }
-//   await room.joinRoom(code, opts)      → ok
-//   room.send(type, data)                — send game move / chat / etc.
-//   room.on(type, handler)               — subscribe to incoming msgs by type
-//   room.onStatus(handler)               — "connecting", "open", "closed", "error"
-//   room.leave()                         — graceful disconnect
-//   room.role                            — "host" | "guest"
-//   room.peerCount                       — 0 or 1
-//
-// Reconnect: PeerJS auto-reconnects to broker; we re-emit "open" then ask
-// host to resend full state (anti-desync).
 
-import { loadPeer, makeRoomCode, peerIdFor } from "./peer.js";
+import { loadPeer, roomPeerId } from "./peer.js";
 import { frame, isValid, MSG } from "./protocol.js";
 import { emit, EVT } from "../core/events.js";
 
 export class Room {
   constructor({ profile } = {}) {
     this.profile = profile || "?";
+    this.gameId = "";
     this.peer = null;
     this.conn = null;
-    this.role = null;     // "host" | "guest"
+    this.role = null;
     this.code = "";
     this.peerCount = 0;
     this.handlers = new Map();
@@ -34,7 +20,6 @@ export class Room {
     this._heartbeatTimer = null;
   }
 
-  // ── public subscribe API ────────────────────────────────
   on(type, handler) {
     if (!this.handlers.has(type)) this.handlers.set(type, new Set());
     this.handlers.get(type).add(handler);
@@ -53,32 +38,37 @@ export class Room {
     this.statusHandlers.forEach(fn => { try { fn(s, meta); } catch {} });
   }
 
-  // ── host ────────────────────────────────────────────────
-  async hostRoom({ code } = {}) {
+  /** Создатель комнаты — peer id привязан к игре и профилю. */
+  async hostRoom({ gameId, profile } = {}) {
     const Peer = await loadPeer();
     this.role = "host";
-    this.code = code || makeRoomCode();
-    const id  = peerIdFor(this.code);
-    this.peer = new Peer(id, { debug: 1 });
+    this.gameId = gameId || "";
+    this.code = roomPeerId(gameId, profile || this.profile);
+    this.peer = new Peer(this.code, { debug: 1 });
     this._wirePeer();
     await this._waitOpen();
     this.peer.on("connection", (conn) => this._adoptConnection(conn));
-    emit(EVT.RoomCreated, { code: this.code, hostId: this.peer.id });
+    emit(EVT.RoomCreated, { code: this.code, gameId, hostId: this.peer.id });
     return { code: this.code };
   }
 
-  // ── guest ───────────────────────────────────────────────
-  async joinRoom(code) {
+  /** Партнёр подключается к комнате создателя (без кодов). */
+  async joinPartner({ gameId, partnerProfile }) {
     const Peer = await loadPeer();
     this.role = "guest";
-    this.code = code.trim().toUpperCase();
+    this.gameId = gameId || "";
+    this.code = roomPeerId(gameId, partnerProfile);
     this.peer = new Peer(undefined, { debug: 1 });
     this._wirePeer();
     await this._waitOpen();
-    const conn = this.peer.connect(peerIdFor(this.code), { reliable: true });
+    const conn = this.peer.connect(this.code, { reliable: true });
     this._adoptConnection(conn);
-    emit(EVT.RoomJoined, { code: this.code, role: this.role, peerId: this.peer.id });
+    emit(EVT.RoomJoined, { code: this.code, gameId, role: this.role, peerId: this.peer.id });
     return true;
+  }
+
+  get isOpen() {
+    return Boolean(this.conn?.open);
   }
 
   _wirePeer() {
@@ -103,18 +93,15 @@ export class Room {
     this._status("connecting");
     conn.on("open", () => {
       this.peerCount = 1;
-      this._status("open", { code: this.code, role: this.role });
-      // Greet
+      this._status("open", { code: this.code, role: this.role, gameId: this.gameId });
       this.send(MSG.Hello, { name: this.profile });
-      if (this.role === "host") this.send(MSG.Ready, {});
+      if (this.role === "host") this.send(MSG.Ready, { host: this.profile });
       this._startHeartbeat();
     });
     conn.on("data", (raw) => {
       if (!isValid(raw)) return;
-      // Pong tracking (silent)
       if (raw.t === MSG.Pong) { this.lastPong = Date.now(); return; }
       if (raw.t === MSG.Ping) { this.conn.send(frame(MSG.Pong, raw.data)); return; }
-      // Remember snapshots for resume/reconnect.
       if (raw.t === MSG.State) this.lastState = raw.data;
       this._emit(raw.t, raw.data);
       emit(EVT.RoomMessage, { type: raw.t, payload: raw.data });
@@ -158,7 +145,11 @@ export class Room {
   }
 }
 
-// Singleton helper — most of the UI assumes one active room at a time.
 let _current = null;
 export function getCurrentRoom() { return _current; }
 export function setCurrentRoom(r) { _current = r; }
+
+export function isRoomReady() {
+  const r = getCurrentRoom();
+  return Boolean(r?.isOpen);
+}

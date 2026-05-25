@@ -1185,6 +1185,28 @@ textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
 
 /* ── durak ─────────────────────────────────────────────── */
 .durak-stage { position: relative; min-height: 420px; }
+.durak-online-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 14px; border-radius: 18px;
+  border: 1px solid rgba(120,200,140,.35);
+  background: linear-gradient(135deg, rgba(120,200,140,.10), rgba(167,139,250,.08));
+}
+.durak-online-bar.warn { border-color: rgba(255,154,118,.35); background: linear-gradient(135deg, rgba(255,154,118,.10), rgba(167,139,250,.06)); }
+.durak-online-bar p { margin: 4px 0 0; width: 100%; }
+
+.online-gate { margin-bottom: 0; }
+.online-gate-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;
+}
+@media (max-width: 540px) {
+  .online-gate-actions { grid-template-columns: 1fr; }
+}
+
+.durak-online-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: #6ee7a0;
+  box-shadow: 0 0 12px rgba(110,231,160,.6);
+  animation: turnGlow 1.4s ease-in-out infinite;
+}
 .durak-fx-layer {
   position: absolute; inset: 0; pointer-events: none; z-index: 30;
   display: flex; align-items: center; justify-content: center;

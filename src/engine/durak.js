@@ -272,3 +272,81 @@ export function legalTransferCards(game) {
   const rank = game.table[0].attack.rank;
   return game.hands[game.defender].filter((c) => c.rank === rank);
 }
+
+/** Синхронизация id карт после получения состояния по сети. */
+export function syncUidFromGame(state) {
+  let max = 0;
+  const scan = (list) => {
+    for (const c of list || []) {
+      if (!c?.id) continue;
+      const n = parseInt(c.id.split("-").pop(), 10);
+      if (!Number.isNaN(n)) max = Math.max(max, n);
+    }
+  };
+  scan(state.deck);
+  scan(state.hands?.[1]);
+  scan(state.hands?.[2]);
+  for (const p of state.table || []) {
+    scan([p.attack]);
+    if (p.defense) scan([p.defense]);
+  }
+  uid = max;
+}
+
+export function packGame(game, bitaCount = 0) {
+  return {
+    variant: game.variant,
+    deck: game.deck,
+    hands: game.hands,
+    trumpSuit: game.trumpSuit,
+    trumpCard: game.trumpCard,
+    attacker: game.attacker,
+    defender: game.defender,
+    table: game.table,
+    winner: game.winner,
+    statusText: game.statusText,
+    bitaCount,
+    recorded: Boolean(game.recorded),
+  };
+}
+
+export function unpackGame(payload) {
+  syncUidFromGame(payload);
+  return {
+    variant: payload.variant,
+    deck: payload.deck,
+    hands: payload.hands,
+    trumpSuit: payload.trumpSuit,
+    trumpCard: payload.trumpCard,
+    attacker: payload.attacker,
+    defender: payload.defender,
+    table: payload.table,
+    winner: payload.winner,
+    statusText: payload.statusText,
+    selectedTarget: null,
+    recorded: Boolean(payload.recorded),
+  };
+}
+
+export function applyMove(game, move) {
+  const { action, cardId, targetIndex, from } = move;
+  switch (action) {
+    case "attack":
+      if (from !== game.attacker) return "Сейчас не твоя атака.";
+      return attack(game, cardId);
+    case "defend":
+      if (from !== game.defender) return "Сейчас не твоя защита.";
+      return defend(game, cardId, targetIndex ?? 0);
+    case "transfer":
+      if (from !== game.defender) return "Сейчас не твоя защита.";
+      return transfer(game, cardId);
+    case "take":
+      if (from !== game.defender) return "Брать карты может только защитник.";
+      return takeCards(game);
+    case "bita":
+      if (from !== game.attacker) return "Биту завершает атакующий.";
+      return finishBita(game);
+    default:
+      return "Неизвестный ход.";
+  }
+}

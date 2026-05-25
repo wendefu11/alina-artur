@@ -1,52 +1,43 @@
 // ─────────────────────────  DATA / GAME CATALOG  ─────────────────────────
-// Single source of truth for the games list. Each entry says:
-//   id     — stable identifier (used in URL hash, storage, events)
-//   loader — async function returning a module with default export = mount fn
-//   title, icon, sub  — UI
-//   tag    — "duo" | "solo" | "pair"  (filter)
-//   modes  — supported modes: ["hotseat", "online", "ai"]
-//   gradient — css for the tile gradient (optional)
-//
-// Lazy-loaded via dynamic import to keep first-paint cheap.
 
 const lazy = (path) => () => import(/* @vite-ignore */ path);
 
 export const CATALOG = {
   ttt: {
-    title: "Крестики-нолики", icon: "✕◯", sub: "Хот-сит, AI или online",
-    tag: "duo", modes: ["hotseat", "ai", "online"],
+    title: "Крестики-нолики", icon: "✕◯", sub: "Online или vs AI",
+    tag: "duo", modes: ["ai", "online"],
     loader: lazy("../games/ttt.js"),
     gradient: "linear-gradient(135deg, rgba(255,93,143,.18), rgba(167,139,250,.10))",
   },
   connect4: {
-    title: "Connect 4", icon: "🔴", sub: "4 в ряд: хот-сит, AI или online",
-    tag: "duo", modes: ["hotseat", "ai", "online"],
+    title: "Connect 4", icon: "🔴", sub: "4 в ряд — online или vs AI",
+    tag: "duo", modes: ["ai", "online"],
     loader: lazy("../games/c4.js"),
     gradient: "linear-gradient(135deg, rgba(96,165,250,.20), rgba(167,139,250,.10))",
   },
   rps: {
-    title: "Камень-Ножницы-Бумага", icon: "✊✋✌", sub: "Скрытый выбор, online или AI",
-    tag: "duo", modes: ["hotseat", "ai", "online"],
+    title: "Камень-Ножницы-Бумага", icon: "✊✋✌", sub: "Online или vs AI",
+    tag: "duo", modes: ["ai", "online"],
     loader: lazy("../games/rps.js"),
   },
   memory: {
-    title: "Память", icon: "🃏", sub: "Найди пары — кто больше",
-    tag: "duo", modes: ["hotseat"],
+    title: "Память", icon: "🃏", sub: "Найди пары — online",
+    tag: "duo", modes: ["online"],
     loader: lazy("../games/memory.js"),
   },
   hangman: {
-    title: "Виселица", icon: "🎯", sub: "Угадай слово до 7 ошибок",
-    tag: "duo", modes: ["hotseat"],
+    title: "Виселица", icon: "🎯", sub: "Угадай слово — online",
+    tag: "duo", modes: ["online"],
     loader: lazy("../games/hangman.js"),
   },
   pong: {
-    title: "Pong", icon: "🏓", sub: "W/S vs ↑/↓ — до 5 очков",
-    tag: "duo", modes: ["hotseat"],
+    title: "Pong", icon: "🏓", sub: "Online — каждый со своего телефона",
+    tag: "duo", modes: ["online"],
     loader: lazy("../games/pong.js"),
   },
   durak: {
-    title: "Дурак", icon: "🃏", sub: "36 карт — подкидной или переводной",
-    tag: "duo", modes: ["hotseat"],
+    title: "Дурак", icon: "🃏", sub: "36 карт — online",
+    tag: "duo", modes: ["online"],
     loader: lazy("../games/durak.js"),
     gradient: "linear-gradient(135deg, rgba(255,154,118,.18), rgba(255,215,111,.12))",
   },
@@ -130,9 +121,18 @@ export const FILTERS = {
 };
 
 export const MODE_LABELS = {
-  hotseat: "Хот-сит",
   online:  "Online",
   ai:      "vs AI",
   solo:    "Соло",
   pair:    "Для пары",
 };
+
+/** Режимы без устаревшего hot-seat. */
+export function playableModes(g) {
+  return (g.modes || []).filter((m) => m !== "hotseat");
+}
+
+export function isOnlineOnly(g) {
+  const m = playableModes(g);
+  return m.length === 1 && m[0] === "online";
+}

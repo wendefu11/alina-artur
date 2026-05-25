@@ -9,14 +9,18 @@ export function tileFor(id, g) {
   const tagLabel = g.tag === "duo"  ? "Вдвоём"
                 : g.tag === "solo" ? "Соло"
                 : "Для пары";
-  const modesBadge = (g.modes || []).filter(m => m !== g.tag).map(m => {
-    const labels = { hotseat: "Hot-seat", ai: "AI", online: "Online" };
+  const modesBadge = (g.modes || []).filter(m => m !== "hotseat" && m !== g.tag).map(m => {
+    const labels = { ai: "AI", online: "Online" };
     return el("span", { class: "tile-tag" }, labels[m] || m);
   });
   return el("button", {
     class: "game-tile",
     style: g.gradient ? `--tile-grad:${g.gradient}` : "",
-    onclick: () => go(`games/${id}`),
+    onclick: () => {
+      const modes = (g.modes || []).filter(m => m !== "hotseat");
+      if (modes.length === 1 && modes[0] === "online") go(`games/${id}/online`);
+      else go(`games/${id}`);
+    },
   },
     el("span", { class: "tile-icon" }, g.icon),
     el("span", { class: "tile-title" }, g.title),

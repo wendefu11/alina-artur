@@ -1,9 +1,9 @@
 // ─────────────────────────  GAME · HANGMAN  ─────────────────────────
-// One player guesses on this device; ctx.profile gets the result credit.
+// Online. Host = слово. По очереди угадывают буквы.
 
-import { el } from "../core/dom.js";
-import { pickRandom } from "../core/dom.js";
+import { el, pickRandom } from "../core/dom.js";
 import { scoreChip } from "../engine/scoreboard.js";
+import { MSG } from "../network/protocol.js";
 import { HANGMAN_WORDS } from "../data/content.js";
 
 const P1 = "Алина", P2 = "Артур";
@@ -23,68 +23,153 @@ const PARTS = [
   `<line x1="130" y1="150" x2="145" y2="180"/>`,
 ];
 
-export default function mount(host, ctx) {
+function freshState() {
   const entry = pickRandom(HANGMAN_WORDS);
-  const word = entry.word;
-  const guessed = new Set();
-  let wrong = 0;
-  const scores = { [P1]: 0, [P2]: 0 };
-  let recorded = false;
+  return {
+    word: entry.word,
+    hint: entry.hint,
+    guessed: [],
+    wrong: 0,
+    turn: 1,
+    recorded: false,
+    scores: { 1: 0, 2: 0 },
+  };
+}
 
-  const renderScore = () => {
+export default function mount(host, ctx) {
+  const room = ctx.room;
+  const isHost = room?.role === "host";
+  const mySlot = ctx.profile === P1 ? 1 : 2;
+  let state = isHost ? freshState() : null;
+  let ready = isHost;
+  const unsub = [];
+
+  function broadcast() {
+    if (isHost && state) room.send(MSG.State, state);
+  }
+
+  function ingest(s) {
+    state = s;
+    ready = true;
+    render();
+    renderScore();
+  }
+
+  function isWon() {
+    return state.word.split("").every((l) => state.guessed.includes(l));
+  }
+  function isLost() {
+    return state.wrong >= MAX;
+  }
+
+  function finishRound(winnerSlot) {
+    if (state.recorded) return;
+    state.recorded = true;
+    if (isHost) {
+      const w = winnerSlot === 1 ? P1 : P2;
+      const l = winnerSlot === 1 ? P2 : P1;
+      state.scores[winnerSlot] += 1;
+      ctx.recordResult("hangman", w, l);
+      ctx.confettiBurst({ count: 40 });
+      broadcast();
+    }
+  }
+
+  function guess(ch) {
+    if (!state || state.guessed.includes(ch)) return;
+    if (state.turn !== mySlot) { ctx.toast("Сейчас не твой ход"); return; }
+    if (!isHost) {
+      room.send(MSG.Move, { letter: ch, from: mySlot });
+      return;
+    }
+    applyGuess(ch);
+    broadcast();
+    render();
+    renderScore();
+  }
+
+  function applyGuess(ch) {
+    state.guessed.push(ch);
+    if (!state.word.includes(ch)) state.wrong += 1;
+    const won = isWon();
+    const lost = isLost();
+    if (won) finishRound(state.turn);
+    else if (lost) finishRound(state.turn === 1 ? 2 : 1);
+    else if (!won && !lost) state.turn = state.turn === 1 ? 2 : 1;
+  }
+
+  function renderScore() {
+    if (!state) return;
     ctx.scoreboardEl.innerHTML = "";
-    ctx.scoreboardEl.append(scoreChip(P1, scores[P1]), scoreChip(P2, scores[P2]));
-  };
-
-  const isWon  = () => word.split("").every(l => guessed.has(l));
-  const isLost = () => wrong >= MAX;
-
-  const svg = () => {
-    const total = 4 + wrong;
-    return `<svg class="hangman-svg" viewBox="0 0 220 220">${PARTS.slice(0, total).join("")}</svg>`;
-  };
+    ctx.scoreboardEl.append(scoreChip(P1, state.scores[1]), scoreChip(P2, state.scores[2]));
+  }
 
   function render() {
     host.innerHTML = "";
-    const won = isWon(), lost = isLost();
-    if (won && !recorded) {
-      const winner = ctx.profile;
-      scores[winner] = (scores[winner] || 0) + 1;
-      ctx.recordResult("hangman", winner, winner === P1 ? P2 : P1);
-      ctx.confettiBurst({ count: 40 });
-      recorded = true;
-    } else if (lost && !recorded) {
-      const loser = ctx.profile;
-      scores[loser === P1 ? P2 : P1] = (scores[loser === P1 ? P2 : P1] || 0) + 1;
-      ctx.recordResult("hangman", loser === P1 ? P2 : P1, loser);
-      recorded = true;
+    if (!ready || !state) {
+      host.append(el("p", { class: "muted" }, "Синхронизация…"));
+      return;
     }
-    const left = el("div", { class: "hangman-stage" },
-      el("div", { html: svg() }),
-      el("p", { style: "color:var(--text-2);margin-top:6px" }, `Ошибки: ${wrong} / ${MAX}`),
-      el("div", { style: "margin-top:10px;font-style:italic" }, "Подсказка: " + entry.hint),
-    );
-    const display = word.split("").map(l => guessed.has(l) ? l : "_").join(" ");
+    const won = isWon();
+    const lost = isLost();
+    const svg = `<svg class="hangman-svg" viewBox="0 0 220 220">${PARTS.slice(0, 4 + state.wrong).join("")}</svg>`;
+    const display = state.word.split("").map((l) => (state.guessed.includes(l) ? l : "_")).join(" ");
+
+    host.append(el("div", { class: "turn-indicator" },
+      el("span", { class: "turn-dot" }),
+      el("span", {}, won || lost
+        ? (won ? `${name(state.turn)} угадал${state.turn === 1 ? "а" : ""}!` : `Слово: ${state.word}`)
+        : state.turn === mySlot ? "Твой ход — угадай букву" : `Ход ${name(state.turn)}`),
+    ));
+
     const letters = el("div", { class: "letter-grid" },
-      ...ALPHA.map(ch => el("button", {
-        class: "letter-btn" + (guessed.has(ch) ? (word.includes(ch) ? " hit" : " miss") : ""),
-        disabled: guessed.has(ch) || won || lost,
-        onclick: () => {
-          guessed.add(ch);
-          if (!word.includes(ch)) wrong++;
-          render(); renderScore();
-        },
+      ...ALPHA.map((ch) => el("button", {
+        class: "letter-btn" + (state.guessed.includes(ch) ? (state.word.includes(ch) ? " hit" : " miss") : ""),
+        disabled: state.guessed.includes(ch) || won || lost || state.turn !== mySlot,
+        onclick: () => guess(ch),
       }, ch)),
     );
-    const right = el("div", { class: "hangman-stage" },
-      el("h2", { class: "display", style: "letter-spacing:.04em" }, `Угадывает: ${ctx.profile}`),
-      el("div", { class: "word-display" }, display),
-      letters,
-      won  ? el("p", { style: "margin-top:14px;color:var(--win);font-weight:700" }, "Угадано! 💞") : null,
-      lost ? el("p", { style: "margin-top:14px;color:var(--loss);font-weight:700" }, "Слово было: " + word) : null,
-      el("button", { class: "cta-btn", style: "margin-top:14px", onclick: () => mount(host, ctx) }, "Новое слово"),
-    );
-    host.append(el("div", { class: "hangman-wrap" }, left, right));
+
+    host.append(el("div", { class: "hangman-wrap" },
+      el("div", { class: "hangman-stage" },
+        el("div", { html: svg }),
+        el("p", { style: "color:var(--text-2);margin-top:6px" }, `Ошибки: ${state.wrong} / ${MAX}`),
+        el("p", { style: "margin-top:8px;font-style:italic" }, "Подсказка: " + state.hint),
+      ),
+      el("div", { class: "hangman-stage" },
+        el("div", { class: "word-display" }, display),
+        letters,
+      ),
+    ));
+
+    if (isHost) {
+      host.append(el("button", {
+        class: "cta-btn", style: "margin-top:14px",
+        onclick: () => { state = freshState(); broadcast(); render(); renderScore(); },
+      }, "Новое слово"));
+    }
   }
-  render(); renderScore();
+
+  function name(slot) { return slot === 1 ? P1 : P2; }
+
+  if (isHost) {
+    unsub.push(room.on(MSG.Move, ({ letter, from }) => {
+      if (from === state.turn) {
+        applyGuess(letter);
+        broadcast();
+        render();
+        renderScore();
+      }
+    }));
+    unsub.push(room.on("sync", broadcast));
+    unsub.push(room.on(MSG.Hello, broadcast));
+    broadcast();
+  } else {
+    unsub.push(room.on(MSG.State, ingest));
+    room.send("sync", {});
+  }
+
+  render();
+  renderScore();
+  ctx.registerCleanup(() => unsub.forEach((f) => f?.()));
 }

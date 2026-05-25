@@ -11,7 +11,7 @@ const EMOJI    = { rock: "✊",       paper: "✋",       scissors: "✌"       
 const P1 = "Алина", P2 = "Артур";
 
 export default function mount(host, ctx) {
-  const mode = ctx.mode || "hotseat";
+  const mode = ctx.mode || "ai";
   const localPlayer = ctx.localPlayer || 1;
   const ai = mode === "ai" ? createRpsAi() : null;
 

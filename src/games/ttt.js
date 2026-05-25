@@ -24,7 +24,7 @@ function checkWinner(board) {
 }
 
 export default function mount(host, ctx) {
-  const mode = ctx.mode || "hotseat";       // "hotseat" | "ai" | "online"
+  const mode = ctx.mode || "ai";       // "hotseat" | "ai" | "online"
   const localPlayer = ctx.localPlayer || 1; // for online: which side is "me"
 
   let board = Array(9).fill(0); // 0 empty, 1 = P1, 2 = P2
