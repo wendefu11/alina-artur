@@ -44,6 +44,12 @@ export const CATALOG = {
     tag: "duo", modes: ["hotseat"],
     loader: lazy("../games/pong.js"),
   },
+  durak: {
+    title: "Дурак", icon: "🃏", sub: "36 карт — подкидной или переводной",
+    tag: "duo", modes: ["hotseat"],
+    loader: lazy("../games/durak.js"),
+    gradient: "linear-gradient(135deg, rgba(255,154,118,.18), rgba(255,215,111,.12))",
+  },
   simon: {
     title: "Simon Says", icon: "🎵", sub: "Повтори световую цепочку",
     tag: "solo", modes: ["solo"],
