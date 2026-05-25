@@ -5,6 +5,9 @@ import { el } from "../core/dom.js";
 import { toast } from "../core/toast.js";
 import { Room, setCurrentRoom, getCurrentRoom, isRoomReady } from "../network/room.js";
 import { partnerOf } from "../network/peer.js";
+import { sendInvite, cancelInvite } from "../network/invite.js";
+import { hideInviteBanner } from "./invite-banner.js";
+import { CATALOG } from "../data/catalog.js";
 import { MSG } from "../network/protocol.js";
 
 export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
@@ -30,12 +33,20 @@ export function renderOnlineGate(gameId, profile, { onConnected, title } = {}) {
       const room = new Room({ profile });
       setCurrentRoom(room);
       await room.hostRoom({ gameId, profile });
-      toast(`${profile} создал${profile === "Алина" ? "а" : ""} комнату. Жди ${partner}.`);
-      status.textContent = `Ждём ${partner}…`;
+      const gameTitle = CATALOG[gameId]?.title || title || gameId;
+      toast(`${profile} создал${profile === "Алина" ? "а" : ""} комнату в «${gameTitle}». Жди ${partner}.`);
+      status.textContent = `Ждём ${partner} в «${gameTitle}»…`;
+
+      const pingInvite = () => sendInvite({ toProfile: partner, gameId, host: profile, title: gameTitle }).catch(() => {});
+      pingInvite();
+      const inviteTimer = setInterval(pingInvite, 20000);
 
       room.on(MSG.Hello, ({ name }) => {
+        clearInterval(inviteTimer);
         toast(`🟢 ${name} подключился!`);
         status.textContent = `🟢 ${name} в комнате`;
+        cancelInvite(partner, gameId).catch(() => {});
+        hideInviteBanner();
       });
       room.onStatus((s) => {
         if (s === "open") {

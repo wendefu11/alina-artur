@@ -20,6 +20,11 @@ export function profileSlug(profile) {
   return profile === "Алина" ? "alina" : "artur";
 }
 
+/** Inbox для приглашений в игру (партнёр слушает свой id). */
+export function signalPeerId(profile) {
+  return `alinartur-signal-${profileSlug(profile)}`;
+}
+
 /** Одна комната на пару + игру: создатель = свой профиль, партнёр подключается к его id. */
 export function roomPeerId(gameId, hostProfile) {
   return `alinartur-${gameId}-${profileSlug(hostProfile)}`;

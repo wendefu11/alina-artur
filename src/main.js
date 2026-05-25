@@ -9,6 +9,8 @@ import { start as startRouter, subscribe, parseHash } from "./ui/router.js";
 import { cleanupActiveGame } from "./ui/views/games.js";
 import { startTracker } from "./achievements/tracker.js";
 import { on, EVT } from "./core/events.js";
+import { startInviteListener, stopInviteListener } from "./network/invite.js";
+import { showInviteBanner, hideInviteBanner } from "./ui/invite-banner.js";
 
 // ── boot ────────────────────────────────────────────────────────
 const state = load();
@@ -19,7 +21,22 @@ showLoginIfNeeded();
 startTracker(state);
 
 // keep shell badge in sync with profile changes
-on(EVT.ProfileChanged, () => refreshBadge());
+on(EVT.ProfileChanged, () => {
+  refreshBadge();
+  bootInviteListener();
+});
+
+function bootInviteListener() {
+  stopInviteListener();
+  hideInviteBanner();
+  if (!state.profile) return;
+  startInviteListener(state.profile, (invite) => {
+    if (invite) showInviteBanner(invite, state.profile);
+    else hideInviteBanner();
+  }).catch((e) => console.warn("[invite]", e));
+}
+
+if (state.profile) bootInviteListener();
 
 // ── router → view ──────────────────────────────────────────────
 const view = $("#view");

@@ -47,6 +47,7 @@ export const EVT = {
   RoomCreated:        "room:created",        // {code, hostId}
   RoomJoined:         "room:joined",         // {code, role, peerId}
   RoomLeft:           "room:left",           // {code}
+  Invite:             "room:invite",         // {gameId, host, title}
   RoomMessage:        "room:message",        // {type, payload}
   AchievementUnlock:  "achievement:unlock",  // {id, title, icon}
   ProfileChanged:     "profile:changed",     // {profile}

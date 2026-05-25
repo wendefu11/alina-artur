@@ -23,6 +23,8 @@ export const MSG = {
   Ping:  "ping",
   Pong:  "pong",
   Bye:   "bye",
+  Invite: "invite",
+  InviteCancel: "invite_cancel",
 };
 
 export function frame(type, data = {}) {

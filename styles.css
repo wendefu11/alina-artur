@@ -151,6 +151,36 @@ html[data-theme="noir"] .aurora { opacity: .14; }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ── invite banner ─────────────────────────────────────── */
+.invite-banner {
+  position: fixed; left: 50%; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); z-index: 120;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  max-width: min(520px, calc(100vw - 24px));
+  padding: 14px 16px; border-radius: 20px;
+  border: 1px solid rgba(120,200,140,.45);
+  background: linear-gradient(135deg, rgba(18,22,38,.96), rgba(28,18,32,.96));
+  box-shadow: 0 18px 48px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06) inset;
+  animation: inviteSlideUp .45s cubic-bezier(.2,.9,.2,1) backwards;
+}
+.invite-banner-body { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px; }
+.invite-banner-icon { font-size: 28px; line-height: 1; }
+.invite-banner-text { display: flex; flex-direction: column; gap: 2px; }
+.invite-banner-text strong { font-size: 15px; }
+.invite-banner-text span { font-size: 13px; color: var(--muted); }
+.invite-banner-actions { display: flex; gap: 8px; align-items: center; }
+.invite-dismiss { min-width: 44px; padding: 10px 12px; }
+.rps-status { min-height: 24px; color: var(--muted); font-weight: 600; }
+@keyframes inviteSlideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@media (max-width: 540px) {
+  .invite-banner { flex-direction: column; align-items: stretch; bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+  .invite-banner-actions { width: 100%; }
+  .invite-banner-actions .cta-btn { flex: 1; }
+}
+
 /* ── topbar / nav ───────────────────────────────────────── */
 .app-shell {
   width: min(1240px, calc(100% - 24px));
